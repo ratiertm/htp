@@ -8,7 +8,7 @@ Region Signal  —  Region → Thalamus 통신 단위
   - overload: Shannon Entropy + CUSUM 기반 과부하 감지
 
 ThalamusOutput: 시상 → PFC 압축 신호
-  - state_vec: JL Random Projection으로 압축된 8차원 벡터
+  - state_vec: JL Random Projection으로 압축된 64차원 벡터 (Stage 4 이후; 이전 8-dim)
   - suppressed: Lateral Inhibition WTA 억제 강도
 """
 
@@ -29,6 +29,9 @@ class RegionSignal:
     top_hubs:     list        # [(node_name, pagerank_score), ...]
     overload:     bool        # Shannon Entropy + CUSUM 과부하 여부
     output_vec:   torch.Tensor  # W.sum(dim=1) — 출력 강도 벡터 (압축 전)
+    precision:    float = 1.0   # [Stage 3-B1] Friston precision. 높을수록 신뢰도 ↑,
+                                # CoreCells gate 에서 score 를 amplification 하는 scaler.
+                                # 1.0 = 중립. Stage 3-B2 에서 Region 이 동적 계산.
 
 
 @dataclass
@@ -50,7 +53,7 @@ class CompetitionResult:
 class ThalamusOutput:
     """Thalamus → PFCRuntime 출력 (JL 압축 벡터)."""
     winner:     str
-    state_vec:  torch.Tensor   # JL Random Projection 8-dim
+    state_vec:  torch.Tensor   # JL Random Projection 64-dim (Stage 4 이후)
     gating:     GatingMask
     suppressed: dict           # {region_id: suppression_strength}
     step:       int

@@ -13,7 +13,7 @@ Thalamus  —  시상 통합 게이팅 허브
   2. CoreCells Sigmoidal Gate → GatingMask
   3. MatrixCells Lateral Inhibition + Softmax → CompetitionResult
   4. 과부하 Region → NGETrigger.fire()
-  5. 승자 Region output_vec → JL Random Projection 압축 → 8-dim state_vec
+  5. 승자 Region output_vec → JL Random Projection 압축 → 64-dim state_vec
   6. ThalamusOutput 반환 → PFCRuntime 전달
 
 수학 요약:
@@ -49,13 +49,14 @@ class Thalamus:
                  temperature:        float = 1.0,
                  core_beta:          float = 5.0,
                  core_theta:         float = 0.3,
-                 compress_dim:       int   = 8):
+                 compress_dim:       int   = 64):
         """
         regions       : {region_name: RegionRuntime}
         temperature   : MatrixCells Softmax 온도
         core_beta     : CoreCells Sigmoid 날카로움
         core_theta    : CoreCells Sigmoid 임계값
-        compress_dim  : JL Projection 출력 차원
+        compress_dim  : JL Projection 출력 차원 (Stage 4: 8→64,
+                        JL Lemma k ≈ log(1000)/0.1² ≈ 64, 해마 place-cell sparse 표현)
         """
         self.regions      = regions
         self.core         = CoreCells(beta=core_beta, theta=core_theta)
@@ -89,10 +90,11 @@ class Thalamus:
         # ── 3. MatrixCells: Lateral Inhibition + WTA ─────
         competition = self.matrix.compete(signals, gating)
 
-        # ── 4. CoreCells Hebbian 학습 (승자 Region 강화) ──
+        # ── 4. CoreCells Hebbian + Homeostatic 학습 (Stage 2-A3) ──
         self.core.update(
-            winner_id = competition.winner_id,
-            all_ids   = [s.region_id for s in signals],
+            winner_id  = competition.winner_id,
+            all_ids    = [s.region_id for s in signals],
+            fire_rates = {s.region_id: s.fire_rate for s in signals},
         )
 
         # ── 5. 과부하 → NGETrigger ────────────────────────

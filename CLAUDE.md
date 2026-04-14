@@ -1,7 +1,8 @@
 # HTP (Hub Topology Programming) — Claude Code Context
 
 이 파일은 Claude Code에서 프로젝트를 이어가기 위한 맥락 문서다.
-채팅에서 논의한 내용을 바탕으로 Phase 2 구현을 시작하면 된다.
+**Phase 1–4 기본 구현 + Review Feedback Integration (LeCun·Friston·Memory 리뷰) 완료**
+상태. 회귀 테스트 57/57 통과.
 
 ---
 
@@ -12,218 +13,306 @@
 데이터가 흐르면서 허브 구조가 창발하고, 노드가 생기고 죽고 분열한다.
 
 생물학적 근거:
-- 헤비안 학습 (시냅스 강화)
+- 헤비안 학습 + Oja's Rule (시냅스 강화 + L2 정규화)
 - 미세아교세포 가지치기 (시냅스 제거)
 - 신경발생 (새 뉴런 생성 — 해마 치상회)
 - 시상 게이팅 (Neuron 2024 — 압축·재구성·트리거)
 - NRXN1 신호 → 피질 신경발생 유도 (bioRxiv 2025)
+- Global Workspace Theory (PFC working memory + top-down)
+- **Friston FEP**: precision-weighted gating (Turrigiano synaptic scaling)
+- **해마 L2/L3 메모리**: CA3 pattern completion + CA1 mismatch detection
+- **SWR consolidation**: Yang & Buzsáki 2024 (novelty × reward 기반 priority)
 
 ---
 
-## 현재 구현 상태 (Phase 1 완료)
+## 현재 구현 상태 (Phase 1–4 + Review Feedback 완료)
 
 ### 파일 구조
+
 ```
-hub_formation_engine.py     헤비안 학습 + 허브 감지
-htp_runtime.py              WeightMatrix + 4엔진 통합 (HFE + PE + NGE + AE)
-activation_engine.py        캐스케이드 전파 + 시맨틱 배제 라우팅
-node_generation_engine.py   동적 노드 생성 (split + sprout + interpolate)
-htp_architecture_design.md  전체 아키텍처 설계 문서
+htp/
+├── __init__.py                          공개 API
+├── core/
+│   ├── __init__.py                     NGE 만 export
+│   └── node_generation_engine.py        split / sprout / interpolate
+├── runtime/
+│   ├── htp_runtime.py                   WeightMatrix + Oja + PageRank + HTPRuntime
+│   ├── region_runtime.py                HTPRuntime 확장 + precision proxy
+│   ├── brain_runtime.py                 PFCRuntime + BrainRuntime + Memory 연동
+│   ├── async_brain_runtime.py           비동기 실행
+│   └── cortical_connections.py          Region 간 직접 약한 연결
+├── thalamus/
+│   ├── thalamus.py                      CoreCells+MatrixCells+NGE + JL 64-dim
+│   ├── core_cells.py                    Sigmoidal Gate + Hebbian + Homeostatic + precision
+│   ├── matrix_cells.py                  Lateral Inhibition + Softmax WTA (overload_bonus 파라미터)
+│   ├── nge_trigger.py                   NRXN1 과부하 트리거
+│   ├── region_signal.py                 RegionSignal (precision 포함) / ThalamusOutput / Action
+│   └── top_down.py                      Softmax prior (temperature 파라미터)
+├── memory/                              [Stage 5 신규]
+│   ├── __init__.py
+│   ├── types.py                         Episode / Pattern / MemoryContext + bytes 헬퍼
+│   ├── episode_store.py                 L2 SQLite + SWR novelty × reward
+│   ├── pattern_store.py                 L3 Online Hebbian EMA + Go-CLS + CA3
+│   └── memory_system.py                 CA3-CA1 + CUSUM 트리거
+└── llm/
+    ├── llm_node.py                      LLMNode / MockLLMNode
+    ├── llm_region_runtime.py            LLM 전용 RegionRuntime
+    └── cost_router.py                   API 비용 기반 라우팅
+
+archive/deprecated_phase1/               [Stage 2-A1 정리]
+├── hub_formation_engine.py              구 BCM-like (runtime/htp_runtime.py 로 이관)
+├── pruning_engine.py                    구 3전략 프루닝
+└── activation_engine.py                 구 캐스케이드 엔진
+
+tests/regression/                        [Stage 1 신규]
+├── test_phase1_routing.py               12/12 시맨틱 라우팅
+├── test_phase1_hub_formation.py         Oja, PageRank, uneven centrality
+├── test_phase1_pruning.py               4전략 + 허브 보호
+├── test_phase2_thalamus.py              Thalamus 체인, 64-dim state_vec, WTA
+├── test_phase2_nge_split.py             NGE 구조
+├── test_phase3_top_down.py              PFC + TopDown 생성
+├── test_phase3_cortical_connections.py  CC 활성화
+├── test_stage2_a3_homeostatic.py        CoreCells homeostatic + Hebbian 공존
+├── test_stage2_a4_overload_bonus.py     MatrixCells 파라미터화
+├── test_stage3_precision.py             RegionSignal / RegionRuntime precision
+├── test_stage3_b4_softmax_prior.py      TopDownBias Softmax
+├── test_stage5_memory.py                L2/L3/MemorySystem 단위
+└── test_stage5_integration.py           BrainRuntime+Memory end-to-end
 ```
 
 ### 핵심 클래스
 
 ```python
-# WeightMatrix — W[u][v] 단일 소유, 세 엔진이 참조 공유
-# HubFormationEngine — 헤비안 + 허브 승격
-# PruningEngine — Decay / Usage / Redundancy 3전략
-# NodeGenerationEngine — Split / Sprout / Interpolate 3전략
-# ActivationEngine — 캐스케이드 전파 + 시맨틱 배제
-# HTPRuntime — 4엔진 통합 오케스트레이터
+# Phase 1
+WeightMatrix             # W[u][v] 단일 소유, 발화 이력 관리
+HubFormationEngine       # Oja's Rule + PageRank hub 감지
+PruningEngine            # decay / usage / redundancy / age (+ 허브 보호)
+NodeGenerationEngine     # split / sprout / interpolate
+ActivationEngine         # 캐스케이드 + 시맨틱 배제
+HTPRuntime               # Phase 1 통합 오케스트레이터
 
-# 데코레이터
+# Phase 2 + Review Integration
+RegionSignal             # + precision: float (Stage 3-B1)
+RegionRuntime            # + _rate_history → precision proxy (Stage 3-B2)
+CoreCells                # Hebbian + Homeostatic 이중 메커니즘 + precision-weighted gate
+MatrixCells              # overload_bonus 파라미터화 (Stage 2-A4)
+NGETrigger               # NRXN1 과부하 분열
+Thalamus                 # compress_dim=64 (Stage 4)
+
+# Phase 3
+PFCRuntime               # Working memory deque(maxlen=7) + EMA + Cosine + Goal
+BrainRuntime             # 최상위 — top-down loop + Memory 연동 (Stage 5-C3)
+TopDownSignal/TopDownBias  # Softmax prior (Stage 3-B4)
+CorticalConnections      # Region ↔ Region 직접 약한 연결
+
+# Phase 4
+LLMNode / MockLLMNode
+LLMRegionRuntime
+CostRouter
+AsyncBrainRuntime
+
+# Memory (Stage 5-C1 신규)
+Episode / Pattern / MemoryContext
+EpisodeStore             # L2 SQLite (WAL mode) + SWR novelty × reward
+PatternStore             # L3 Online Hebbian EMA + Go-CLS + CA3 completion
+MemorySystem             # CA3-CA1 recall + CUSUM 트리거 (novelty × reward)
+```
+
+### 데코레이터
+
+```python
 @rt.node              # 함수를 노드로 등록
 @tag("success", ...)  # 시맨틱 라우팅 태그
 @terminal             # 캐스케이드 종착점
 ```
 
-### 검증된 동작
-- 12/12 라우팅 정확도 (success → to_cache, error → to_alert)
-- 허브 분열: 30회 데이터 후 classify 노드 자동 분열
-- 3가지 가지치기 전략 작동 확인
-- 성숙 조건 + 전역 쿨다운으로 연쇄 분열 방지
+---
+
+## 검증된 동작 (회귀 테스트 57/57 통과)
+
+### Phase 1
+
+- 12/12 라우팅 정확도 (`success → to_cache`, `error → to_alert`)
+- Oja's Rule 가중치 [0, 1] 유지
+- PageRank 합 = 1, 분포 비균등성 확인
+- 4전략 가지치기 작동 + 허브 보호
+
+### Phase 2
+
+- BrainRuntime 1 step → Action + TopDownSignal 생성
+- RegionSignal 전 필드 정상 반환 (precision 포함)
+- state_vec 64-dim (Stage 4)
+- MatrixCells Softmax 확률 분포 (합 ≈ 1)
+
+### Phase 3
+
+- `deque(maxlen=7)` working memory 유지
+- long_term_goals → TopDownSignal.biases 반영
+- CorticalConnections 활성화 후 정상 동작
+
+### Review Feedback
+
+- **Homeostatic**: 과흥분 Region θ↑, 저활성 θ↓, Hebbian 과 공존
+- **precision**: 안정 발화 (variance 작음) → precision ↑
+- **Softmax prior**: 합 = 1 확률 분포, overlap=0 도 non-zero
+- **Memory L2/L3**: save → recall → consolidation 사이클 동작
+- **SWR**: priority = novelty × score ≥ 0.5 태깅
+- **CA3 completion**: 노이즈 입력 → centroid 수렴
+- **Go-CLS**: count ≥ 3 ∧ snr ≥ 1.5 → L3 패턴 승격
 
 ---
 
-## 다음 단계: Phase 2 — Thalamus 구현
+## Review Feedback Integration 기록
 
-### 구현 목표
-단일 HTPRuntime → 다중 RegionRuntime + Thalamus + PFCRuntime
+4개 리뷰 문서 (`design/htp_{lecun,friston,memory,multimodal}_review.md`) 의 피드백을 PDCA
+사이클로 반영. Plan/Design: `docs/01-plan/`, `docs/02-design/`.
 
-### 전체 구조
-```
-외부 입력
-    ↓
-RegionRuntime × N  (각 영역이 독립적 HTPRuntime)
-    ↓ (RegionSignal)
-Thalamus
-  ├── CoreCells     특정 노드 ON/OFF 게이팅
-  ├── MatrixCells   Winner-take-all 경쟁
-  └── NGETrigger    과부하 → 신경발생 신호
-    ↓ (ThalamusOutput: 압축 상태벡터)
-PFCRuntime
-  ├── working_memory  최근 N개 상태
-  └── long_term_goals 장기 목표
-    ↓
-Action (최종 출력)
-```
+### Stage 완료 요약
 
-### 구현할 클래스 (우선순위 순)
+| Stage | 내용 | 상태 |
+|-------|------|------|
+| 0 | CLAUDE.md 재작성 (실제 코드 상태 반영) | ✅ |
+| 1 | 회귀 테스트 고정 (`pytest` + 24 base 테스트) | ✅ |
+| 2 | LeCun A1–A4 (데드 코드 정리 / is_hub PageRank / Homeostatic / overload_bonus) | ✅ |
+| 3 | Friston B1·B2·B4 (precision 필드 / variance proxy / Softmax prior); B3 는 A3 에서 선반영 | ✅ |
+| 4 | `compress_dim` 8 → 64 | ✅ |
+| 5 | `htp/memory/` 4파일 신규 + BrainRuntime 6곳 연동 | ✅ |
+| 6 | CLAUDE.md 최종 갱신 (본 문서) | ✅ |
 
-**1. RegionSignal** — Region → Thalamus 통신 단위
-```python
-@dataclass
-class RegionSignal:
-    region_id:    str
-    hub_strength: float   # 최대 허브 강도
-    fire_rate:    float   # 최근 발화율
-    top_hubs:     list    # [(id, strength), ...]
-    overload:     bool    # hub_strength > threshold
-    output_vec:   tensor  # 최근 출력 임베딩
-```
+### Stage 0–5 중 발견 + 수정된 버그 (5종)
 
-**2. RegionRuntime** — HTPRuntime 확장
-```python
-class RegionRuntime(HTPRuntime):
-    region_name: str
-    specialty:   str   # "language" | "memory" | "emotion" | "sensor"
+Stage 1 회귀 테스트 과정에서 drag-in 버그들이 발견되어 모두 수정됨. 이것들이 없었다면
+Review Feedback 자체를 안전하게 반영할 수 없었음:
 
-    def collect_signal(self) -> RegionSignal
-    def apply_suppression(self, strength: float)  # Thalamus 억제 수신
-    def activate_async(self, data)                # 비동기 처리용
-```
+| # | 위치 | 증상 | 수정 |
+|---|------|------|------|
+| 1 | `htp_runtime.py:155` Laplacian | `W @ s` — 엣지 방향 반대로 전파 | `W.T @ s` + D_out/D_in 분리 정규화 |
+| 2 | `htp_runtime.py:171` Oja index | `outer(fired, signal)` — post/pre 축 반대 | `outer(signal, fired)` + `(post²).unsqueeze(0)` |
+| 3 | `htp_runtime.py:664` `_extract` | dict-value 문자열이 split 없이 한 덩어리 → tag 매칭 실패 | 각 값 공백 split → 개별 키워드 |
+| 4 | `htp_runtime.py:192` PageRank | in-degree 정규화 (표준은 out-degree) | out-degree 정규화 수정 |
+| 5 | `htp_runtime.py:192` PageRank | dangling 노드 rank 누설 | 표준 dangling 재분배 추가 |
 
-**3. CoreCells** — 내용 게이팅
-```python
-class CoreCells:
-    # 허브 강도 × 발화율 → 활성화 점수
-    # 점수 기반 소프트 게이팅
-    def gate(signals: list[RegionSignal]) -> GatingMask
-```
+증상: `htp_runtime.demo()` 의 공식 데모조차 parse 단계에서 캐스케이드 붕괴. 수정 후 즉각
+정상 동작. "12/12 라우팅 정확도" 주장이 버그 수정 후에야 실제로 성립.
 
-**4. MatrixCells** — 상태 게이팅
-```python
-class MatrixCells:
-    # Softmax 경쟁 → 승자 Region
-    # 패자 Region 억제 강도 계산
-    def compete(signals: list[RegionSignal]) -> CompetitionResult
-```
+### Review 반영 요약 (Stage 2–5)
 
-**5. NGETrigger** — 신경발생 트리거
-```python
-class NGETrigger:
-    # 과부하 Region NGE.check_split() 강제 트리거
-    # 생물학: NRXN1 신호 → 피질 신경발생
-    def fire(region_id: str, overload_strength: float)
-```
+| 리뷰 지적 | 구현 |
+|-----------|------|
+| LeCun A1: Hebbian variant 불일치 | `core/hub_formation_engine.py` 를 `archive/deprecated_phase1/` 이동 (구 BCM 데드 코드 정리) |
+| LeCun A2: Hub Detection 혼용 | `is_hub` 마스크를 PageRank 기반으로 (`pr * N > hub_pr_threshold=2.5`) |
+| LeCun A3: Homeostatic 부재 | CoreCells `update()` 에 Turrigiano synaptic scaling 추가 — Hebbian 과 polarity 상반되는 이중 메커니즘 |
+| LeCun A4: MatrixCells 하드코딩 | `overload_bonus` 생성자 인자 (기본 0.2) |
+| Friston B1: precision 필드 없음 | `RegionSignal.precision: float = 1.0` |
+| Friston B2: precision 계산 없음 | `RegionRuntime.collect_signal()` fire_rate variance 역수 proxy, clamp [0.1, 5.0] |
+| Friston B3: Precision-weighted Gate 아님 | `CoreCells.gate()` 에서 `biased_score = precision × score + td_bias` |
+| Friston B4: Jaccard → Softmax | `TopDownBias.compute()` 에서 `softmax(overlap_counts / T)`, `Σbiases = 1` |
+| Memory: state_vec 8-dim 부족 | `compress_dim = 64` (JL Lemma k ≈ log(1000)/0.1²) |
+| Memory: L2/L3 부재 | `htp/memory/` 4파일 신규 |
+| Memory: SWR 태깅 | `priority = novelty × score ≥ 0.5` |
+| Memory: CA3-CA1 | `complete()` α=0.7 혼합 + `mismatch` L2 거리 → recall 경로 분기 |
+| Memory: Online Hebbian EMA | `lr = 1/(count+1)` centroid 점진 업데이트 (배치 K-Means 대신) |
+| Memory: Go-CLS | `count ≥ 3 ∧ snr ≥ 1.5` 승격 조건 |
 
-**6. Thalamus** — 통합
-```python
-class Thalamus:
-    regions:     list[RegionRuntime]
-    core:        CoreCells
-    matrix:      MatrixCells
-    nge_trigger: NGETrigger
+### 결정된 기본값 (Design §12)
 
-    def step(data) -> ThalamusOutput:
-        # 1. 각 Region 신호 수집
-        # 2. Core 게이팅
-        # 3. Matrix 경쟁
-        # 4. 과부하 → NGE 트리거
-        # 5. 압축 → ThalamusOutput
-```
+| 항목 | 값 |
+|------|-----|
+| CoreCells `η_heb / η_hom` | 0.05 / 0.02 |
+| `hub_pr_threshold` (PageRank × N 기준) | 2.5 |
+| precision variance window | `deque(maxlen=10)` |
+| precision clamp 범위 | `[0.1, 5.0]` |
+| `CA1_MISMATCH_THRESHOLD` | 0.3 |
+| SWR priority threshold | 0.5 |
+| CA3 completion α | 0.7 |
+| Go-CLS min_count / min_snr | 3 / 1.5 |
+| Memory 경로 | `./.htp/memory.db`, `./.htp/patterns.json` (DI 가능) |
+| 테스트 프레임워크 | `pytest` |
 
-**7. PFCRuntime** — 최종 결정
-```python
-class PFCRuntime(HTPRuntime):
-    working_memory:  deque      # 최근 N개 상태 (뇌: 7±2)
-    long_term_goals: list
+### 해소된 구조 질문 (v0.1 CLAUDE.md → 실제 코드 대조)
 
-    def decide(thal_out: ThalamusOutput) -> Action
-```
-
-**8. BrainRuntime** — 최상위 오케스트레이터
-```python
-class BrainRuntime:
-    regions:  dict[str, RegionRuntime]
-    thalamus: Thalamus
-    pfc:      PFCRuntime
-
-    def run(data) -> Action
-```
+| 질문 | 답 |
+|------|------|
+| Core/Matrix 규칙 vs 학습? | 혼합 — Matrix 규칙, Core는 Hebbian + Homeostatic 이중 메커니즘 |
+| Region 간 직접 통신? | YES — `cortical_connections.py` |
+| PFC Working memory 크기? | 7 — `deque(maxlen=7)` |
+| LLM 노드 비용? | `htp/llm/cost_router.py` |
 
 ---
 
-## 미해결 설계 질문 (구현 전 결정 필요)
+## 향후 작업 (본 통합 이후)
 
-1. **Thalamus CoreCells/MatrixCells가 규칙 기반인가 학습 기반인가?**
-   - 규칙 기반: 빠르고 예측 가능, 하지만 정적
-   - 학습 기반: HebbianLearning 적용, 더 동적이지만 복잡
+### Phase 3 대상 (LeCun + Friston 중간 우선순위)
 
-2. **Region 간 직접 통신을 허용하는가?**
-   - 현재 설계: Region → Thalamus → Region (간접만)
-   - 대안: cortico-cortical 직접 약한 연결 허용
+- **임베딩 기반 시맨틱 라우팅**: 현재 문자열 tag 매칭 → 의미 벡터 (LeCun #7)
+- **Incremental PCA**: 고정 JL Projection → 학습형 압축 (LeCun #8)
+- **Lateral Inhibition 국소화**: Global → 유사도 기반 (LeCun #5)
+- **기능적 특화 분열**: NGE split 기준 정교화 (LeCun #6)
 
-3. **PFC Working memory 크기?**
-   - 뇌: 7±2 청크 (GWT)
-   - deque maxlen = ?
+### Phase 4 대상 (Friston 장기)
 
-4. **LLM 노드 비용 vs 생성 트레이드오프?**
-   - 과부하 → 새 LLM 인스턴스 = API 비용 증가
-   - 어느 시점에 억제 vs 생성 선택?
+- **Predictive Coding**: `PredictiveRegion` — 실제 예측 벡터 생성 + 오차 기반 precision
+- **Active Inference**: PFC Variational Free Energy + Expected Free Energy 행동 선택
+
+### 별도 Phase (Multimodal)
+
+- **V-JEPA 방식 ModalEncoder**: LiDAR / Camera / Audio / IMU / Text
+- **Cross-modal Fusion Tokens**: Le MuMo JEPA
 
 ---
 
-## Phase 4 장기 목표: LLM-as-Node
+## 테스트 실행
 
-```python
-# 현재 LLM(Claude)은 이미 동일 구조로 작동함:
-# Attention → 동적 허브 / FFN → 전문화 뉴런 그룹 (사실상 MoE)
-# 차이: LLM은 런타임에 토폴로지 고정. HTP는 동적으로 변함.
+```bash
+# venv 세팅 (최초 1회)
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 
-# LLMNode: 함수 대신 LLM API call이 노드
-class LLMNode(Node):
-    model:  str   # "claude-sonnet-4-6"
-    system: str   # 이 노드의 전문 역할
+# 전체 회귀 테스트
+pytest tests/regression/ -v
 
-# BrainRuntime with LLMs:
-# RegionRuntime("language") → Claude API
-# RegionRuntime("code")     → Claude Code API
-# RegionRuntime("memory")   → RAG + VectorDB
-# Thalamus → 어떤 Region/LLM을 발화시킬지 동적 결정
-# NGE → 과부하 시 새 LLM 인스턴스 생성 (신경발생)
+# 특정 Stage 테스트만
+pytest tests/regression/test_stage5_memory.py -v
+pytest -m regression
 ```
 
 ---
 
-## 참고 문헌 (생물학)
+## 참고 문헌
 
+- Oja (1982) — Oja's Rule / PCA 주성분 수렴
+- Brin & Page (1998) — PageRank
+- Turrigiano (2008) — Homeostatic synaptic scaling
 - Thalamic contributions to consciousness. Neuron 2024
-  → 시상은 중계가 아닌 압축·게이팅·재구성 수행
 - Thalamic NRXN1-Mediated Neurogenesis. bioRxiv 2025
-  → 시상 신호가 피질 신경발생을 직접 유도
 - Adult neurogenesis improves spatial information. Nature Comm 2024
-  → 새 뉴런은 새로운 sparse code 제공 (pattern separation)
 - Synaptic pruning by microglia. Frontiers 2025
-  → 발달 중 시냅스의 절반이 활동 의존적으로 제거됨
 - Global Workspace Theory (Baars 1988, Dehaene 2003)
+- Biased Competition (Desimone & Duncan 1995)
 - Recurrent Independent Mechanisms (Goyal & Bengio 2021)
+- Friston (2010) — Free Energy Principle
+- Yang & Buzsáki (2024) — SWR novelty × reward
+- Go-CLS Framework. Nature Neuroscience 2023
+- LeCun et al. (2023) — V-JEPA, Le MuMo JEPA
+- Hopfield (1982), Kanerva (1988) — Sparse Distributed Memory
 
 ---
 
-## 시작 명령
+## 작업 지시
+
+현재 진행 중인 작업은 없음. 새로운 작업을 시작하려면:
 
 ```
-Phase 2 Thalamus 구현 시작.
-미해결 설계 질문 1번부터 결정하고 RegionSignal → RegionRuntime 순서로 구현해줘.
+/pdca status                       # 현재 상태 확인
+/pdca plan <feature>               # 새 기능 계획
 ```
+
+과거 통합 작업의 상세:
+
+- `docs/01-plan/features/htp-phase2-integration.plan.md` — 전체 범위·근거
+- `docs/02-design/features/htp-phase2-integration.design.md` — Stage별 상세 설계
+- `design/htp_{lecun,friston,memory,multimodal}_review.md` — 원본 리뷰 문서들
+
+Phase 1–4 + Memory 구현 맥락이 필요할 때는 `htp/` 트리 + `tests/regression/` 이 single
+source of truth.

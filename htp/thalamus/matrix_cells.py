@@ -42,17 +42,21 @@ class MatrixCells:
     """
 
     def __init__(self,
-                 temperature:   float = 1.0,
-                 lateral_w:     float = 0.15,
-                 lateral_iter:  int   = 3):
+                 temperature:    float = 1.0,
+                 lateral_w:      float = 0.15,
+                 lateral_iter:   int   = 3,
+                 overload_bonus: float = 0.2):
         """
-        temperature  : Softmax 온도 (낮을수록 더 날카로운 WTA)
-        lateral_w    : 측억제 강도 (0~1)
-        lateral_iter : 측억제 반복 횟수
+        temperature    : Softmax 온도 (낮을수록 더 날카로운 WTA)
+        lateral_w      : 측억제 강도 (0~1)
+        lateral_iter   : 측억제 반복 횟수
+        overload_bonus : [Stage 2-A4] 과부하 Region 에 가산되는 원시 점수 보너스.
+                         0.0 이면 과부하 우선처리 비활성. 기본 0.2 유지로 기존 동작 보존.
         """
-        self.temperature  = temperature
-        self.lateral_w    = lateral_w
-        self.lateral_iter = lateral_iter
+        self.temperature    = temperature
+        self.lateral_w      = lateral_w
+        self.lateral_iter   = lateral_iter
+        self.overload_bonus = overload_bonus
 
     def compete(self,
                 signals: List[RegionSignal],
@@ -72,7 +76,8 @@ class MatrixCells:
 
         # 1. 원시 점수: gating + 과부하 보너스 (과부하 Region 우선 처리)
         raw = torch.tensor([
-            gating.scores.get(sig.region_id, 0.0) + (0.2 if sig.overload else 0.0)
+            gating.scores.get(sig.region_id, 0.0)
+            + (self.overload_bonus if sig.overload else 0.0)
             for sig in signals
         ], dtype=torch.float32)
 

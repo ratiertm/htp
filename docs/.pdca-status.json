@@ -1,0 +1,577 @@
+{
+  "version": "2.0",
+  "lastUpdated": "2026-04-14T21:37:37.978Z",
+  "activeFeatures": [
+    "htp-phase2-integration",
+    "tests",
+    "regression",
+    "runtime",
+    "core",
+    "thalamus",
+    "memory"
+  ],
+  "primaryFeature": "htp-phase2-integration",
+  "features": {
+    "htp-phase2-integration": {
+      "phase": "do",
+      "startedAt": "2026-04-14T13:30:00.000Z",
+      "planPath": "docs/01-plan/features/htp-phase2-integration.plan.md",
+      "designPath": "docs/02-design/features/htp-phase2-integration.design.md"
+    },
+    "tests": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-14T20:10:18.292Z",
+        "lastUpdated": "2026-04-14T21:36:30.046Z"
+      },
+      "lastFile": "/Users/leeeunmi/Projects/active/htp/tests/conftest.py"
+    },
+    "regression": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-14T20:10:19.730Z",
+        "lastUpdated": "2026-04-14T21:37:37.978Z"
+      },
+      "lastFile": "/Users/leeeunmi/Projects/active/htp/tests/regression/test_stage5_integration.py"
+    },
+    "runtime": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-14T20:20:38.819Z",
+        "lastUpdated": "2026-04-14T21:36:12.087Z"
+      },
+      "lastFile": "/Users/leeeunmi/Projects/active/htp/htp/runtime/brain_runtime.py"
+    },
+    "core": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-14T20:52:58.070Z",
+        "lastUpdated": "2026-04-14T20:52:58.070Z"
+      },
+      "lastFile": "/Users/leeeunmi/Projects/active/htp/htp/core/__init__.py"
+    },
+    "thalamus": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-14T21:02:28.817Z",
+        "lastUpdated": "2026-04-14T21:28:38.745Z"
+      },
+      "lastFile": "/Users/leeeunmi/Projects/active/htp/htp/thalamus/region_signal.py"
+    },
+    "memory": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-14T21:31:37.315Z",
+        "lastUpdated": "2026-04-14T21:34:47.978Z"
+      },
+      "lastFile": "/Users/leeeunmi/Projects/active/htp/htp/memory/memory_system.py"
+    }
+  },
+  "pipeline": {
+    "currentPhase": 1,
+    "level": "Dynamic",
+    "phaseHistory": []
+  },
+  "session": {
+    "startedAt": "2026-04-14T13:16:22.198Z",
+    "onboardingCompleted": false,
+    "lastActivity": "2026-04-14T21:37:37.978Z"
+  },
+  "history": [
+    {
+      "feature": "htp-phase2-integration",
+      "phase": "plan",
+      "at": "2026-04-14T13:30:00.000Z"
+    },
+    {
+      "feature": "htp-phase2-integration",
+      "phase": "design",
+      "at": "2026-04-14T14:00:00.000Z"
+    },
+    {
+      "feature": "htp-phase2-integration",
+      "phase": "do",
+      "at": "2026-04-15T00:00:00.000Z"
+    },
+    {
+      "timestamp": "2026-04-14T20:10:18.292Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:10:19.730Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:10:41.318Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:10:55.593Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:11:08.962Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:11:18.796Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:11:34.127Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:11:45.918Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:11:55.899Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:11:59.363Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:20:38.819Z",
+      "feature": "runtime",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:22:26.934Z",
+      "feature": "runtime",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:24:30.012Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:24:38.939Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:29:00.597Z",
+      "feature": "runtime",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:29:27.308Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:29:33.087Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:52:58.070Z",
+      "feature": "core",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:53:38.836Z",
+      "feature": "runtime",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:53:43.986Z",
+      "feature": "runtime",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:54:46.139Z",
+      "feature": "runtime",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:56:22.001Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T20:56:31.607Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:01:33.624Z",
+      "feature": "runtime",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:02:28.817Z",
+      "feature": "thalamus",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:02:38.567Z",
+      "feature": "thalamus",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:02:42.386Z",
+      "feature": "thalamus",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:02:52.227Z",
+      "feature": "thalamus",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:02:59.510Z",
+      "feature": "thalamus",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:03:18.593Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:05:23.167Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:06:12.034Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:06:34.175Z",
+      "feature": "thalamus",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:06:37.565Z",
+      "feature": "thalamus",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:06:48.213Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:08:30.585Z",
+      "feature": "thalamus",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:08:47.776Z",
+      "feature": "runtime",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:08:53.950Z",
+      "feature": "runtime",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:09:00.566Z",
+      "feature": "runtime",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:09:11.426Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:25:37.127Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:26:23.519Z",
+      "feature": "thalamus",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:26:40.268Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:28:32.190Z",
+      "feature": "thalamus",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:28:33.346Z",
+      "feature": "thalamus",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:28:35.786Z",
+      "feature": "thalamus",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:28:37.623Z",
+      "feature": "thalamus",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:28:38.745Z",
+      "feature": "thalamus",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:28:45.882Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:31:37.315Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:31:57.038Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:32:32.968Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:32:55.923Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:32:58.047Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:33:36.275Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:34:09.154Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:34:10.809Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:34:14.915Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:34:16.380Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:34:18.078Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:34:19.801Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:34:22.161Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:34:27.229Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:34:31.384Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:34:37.559Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:34:38.822Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:34:41.634Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:34:44.048Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:34:47.978Z",
+      "feature": "memory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:34:53.696Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:35:44.231Z",
+      "feature": "runtime",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:35:48.486Z",
+      "feature": "runtime",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:36:12.087Z",
+      "feature": "runtime",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:36:30.046Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-14T21:37:37.978Z",
+      "feature": "regression",
+      "phase": "do",
+      "action": "updated"
+    }
+  ]
+}

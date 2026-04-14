@@ -27,8 +27,10 @@ Brain Runtime  —  PFCRuntime + BrainRuntime
 
 from __future__ import annotations
 
+import re
 from collections import deque
-from typing      import Optional, Any
+from pathlib      import Path
+from typing       import Optional, Any
 
 import torch
 import torch.nn.functional as F
@@ -37,6 +39,7 @@ from .htp_runtime    import HTPRuntime, HTPConfig
 from .region_runtime import RegionRuntime
 from ..thalamus.region_signal import ThalamusOutput, Action
 from ..thalamus.top_down      import TopDownSignal, TopDownBias
+from ..memory.memory_system   import MemorySystem
 
 
 # ══════════════════════════════════════════════════════════
@@ -228,13 +231,21 @@ class BrainRuntime:
       action = brain.run(data)
     """
 
-    def __init__(self, pfc_config: Optional[HTPConfig] = None):
+    def __init__(self,
+                 pfc_config: Optional[HTPConfig] = None,
+                 memory_dir: str | Path = ".htp",
+                 enable_memory: bool = True):
         self.regions  : dict[str, RegionRuntime] = {}
         self.thalamus                            = None
         self.pfc      : PFCRuntime               = PFCRuntime(pfc_config)
         self._step    : int                      = 0
-        self._last_td : Optional[TopDownSignal]  = None   # top-down 피드백 보존
-        self._cc                                 = None    # CorticalConnections (선택)
+        self._last_td : Optional[TopDownSignal]  = None
+        self._cc                                 = None     # CorticalConnections (선택)
+        # [Stage 5-C3] Memory System 연동
+        self.memory: Optional[MemorySystem] = (
+            MemorySystem(memory_dir=memory_dir) if enable_memory else None
+        )
+        self._last_state_vec: Optional[torch.Tensor] = None
 
     def add_region(self, name: str, region: RegionRuntime):
         """Region 추가. Thalamus는 다음 run()에서 재생성."""
@@ -255,10 +266,22 @@ class BrainRuntime:
     def run(self, data: Any) -> Action:
         """
         Brain 1 스텝 실행.
-        top-down feedback loop 포함.
+        top-down feedback loop + Memory System (Stage 5-C3) 포함.
         """
         self._ensure_thalamus()
         self._step += 1
+
+        # [C3-①] recall: 이전 state_vec 기반 기억 조회
+        mem_ctx = None
+        if (self.memory is not None
+                and self._step > 1
+                and self._last_state_vec is not None):
+            mem_ctx = self.memory.recall(self._last_state_vec)
+            # [C3-②] CA1 추천을 top-down hint 로 주입
+            if mem_ctx.recommendation and not mem_ctx.is_novel:
+                self._last_td = self._inject_memory_hint(
+                    self._last_td, mem_ctx.recommendation, mem_ctx.confidence,
+                )
 
         # 1. 모든 Region 활성화
         for region in self.regions.values():
@@ -268,14 +291,36 @@ class BrainRuntime:
                 except Exception as e:
                     print(f"  [warn] Region({region.region_name}): {e}")
 
-        # 2. Thalamus (이전 스텝 top-down 반영)
+        # 2. Thalamus (이전 스텝 top-down + memory hint 반영)
         thal_out = self.thalamus.step(data, top_down=self._last_td)
 
         # 3. PFC 결정 + 새 TopDownSignal 생성
         action, td_signal = self.pfc.decide(thal_out, regions=self.regions)
 
-        # 4. top-down 신호 보존 (다음 스텝에서 Thalamus에 전달)
+        # 4. top-down 신호 보존
         self._last_td = td_signal
+
+        # [C3-③] state_vec 보존 — 다음 스텝 recall 용
+        self._last_state_vec = thal_out.state_vec.detach().clone()
+
+        # [C3-④] 에피소드 저장
+        if self.memory is not None:
+            score = self._extract_score(action)
+            self.memory.save(
+                state_vec   = thal_out.state_vec,
+                step        = self._step,
+                winner      = action.winner,
+                action_type = action.type,
+                score       = score,
+                context     = str(data)[:50],
+            )
+
+        # [C3-⑤] CUSUM overload → consolidation 트리거 (수면 메커니즘)
+        if self.memory is not None:
+            for name, region in self.regions.items():
+                if region._cusum_S > region._cusum_h:
+                    self.memory.on_overload(name)
+                    region._cusum_S = 0.0       # 수면 후 초기화
 
         # 5. 억제 피드백 → 패자 Region
         for rid, strength in thal_out.suppressed.items():
@@ -286,7 +331,7 @@ class BrainRuntime:
         if self._cc is not None:
             self._cc.apply(thal_out)
 
-        # 7. winner Region 결과를 action.result에 채움
+        # 7. winner Region 결과를 action.result 에 채움
         winner_region = self.regions.get(action.winner)
         if winner_region is not None:
             last = getattr(winner_region, "_last_result", None)
@@ -294,6 +339,41 @@ class BrainRuntime:
                 action.result = last.outputs.get(action.winner)
 
         return action
+
+    # ── Memory 헬퍼 (Stage 5-C3) ───────────────────
+
+    def _inject_memory_hint(self,
+                            td: Optional[TopDownSignal],
+                            recommended: str,
+                            confidence: float) -> TopDownSignal:
+        """CA1 추천 → 기존 td 의 biases[recommended] 를 boost."""
+        bias_strength = confidence * 0.5
+        if td is None:
+            return TopDownSignal(
+                biases   = {recommended: bias_strength},
+                strength = 0.3,
+                step     = self._step,
+            )
+        td.biases[recommended] = max(
+            td.biases.get(recommended, 0.0), bias_strength,
+        )
+        return td
+
+    @staticmethod
+    def _extract_score(action: Action) -> float:
+        """action.reason 에서 'score=0.xxx' 파싱."""
+        m = re.search(r"score=([-\d.]+)", action.reason or "")
+        if m:
+            try:
+                return float(m.group(1))
+            except ValueError:
+                pass
+        return 0.5
+
+    def feedback(self, outcome: str, episode_id: Optional[str] = None):
+        """행동 결과를 마지막(또는 지정) 에피소드에 기록."""
+        if self.memory is not None:
+            self.memory.feedback(outcome, episode_id)
 
     def status(self):
         SEP = "=" * 62

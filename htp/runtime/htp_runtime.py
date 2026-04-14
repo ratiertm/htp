@@ -43,10 +43,11 @@ import torch
 
 @dataclass
 class HTPConfig:
-    n_nodes:         int   = 64
-    threshold:       float = 0.35   # 노드 발화 임계값
-    hub_threshold:   float = 1.5    # 허브 승격 임계값
-    hebbian_lr:      float = 0.13   # 헤비안 학습률
+    n_nodes:          int   = 64
+    threshold:        float = 0.35  # 노드 발화 임계값
+    hub_threshold:    float = 1.5   # [DEPRECATED] in_strength sum 기반 허브 승격 — 현재 미사용
+    hub_pr_threshold: float = 2.5   # PageRank 기준 허브 승격 (1/N 대비 배수)
+    hebbian_lr:       float = 0.13  # 헤비안 학습률
     # Pruning 설정
     decay_rate:      float = 0.005  # 시간 감쇠율 (매 스텝)
     prune_threshold: float = 0.02   # 이 이하면 엣지 제거
@@ -148,11 +149,13 @@ class HubFormationEngine:
         self.step_count += 1
         W = self.wm.W
 
-        # 1. Graph Laplacian Diffusion 전파
-        #    x_{t+1} = (1-dt)*x + dt * D^{-1/2} W D^{-1/2} x
-        #    생물학: 전기화학 신호의 세포막 확산과 수학적으로 동일
-        D_inv_sqrt = W.sum(dim=1).clamp(min=1e-8).pow(-0.5)   # [N] D^{-1/2}
-        propagated = D_inv_sqrt * (W @ (D_inv_sqrt * signal))  # D^{-1/2} W D^{-1/2} x
+        # 1. Graph Laplacian Diffusion 전파 (directed edges: W[u][v] = u→v)
+        #    신호가 엣지 방향을 따라 전파되려면 W.T 를 써야 한다:
+        #    (W.T @ s)[v] = Σ_u W[u][v]·s[u]  = v가 in-neighbors 로부터 받는 합
+        #    D_out(u) = Σ_v W[u][v]  를 u 측에서 정규화, D_in(v) = Σ_u W[u][v] 를 v 측에서 정규화.
+        D_out_inv_sqrt = W.sum(dim=1).clamp(min=1e-8).pow(-0.5)   # [N] out-degree
+        D_in_inv_sqrt  = W.sum(dim=0).clamp(min=1e-8).pow(-0.5)   # [N] in-degree
+        propagated     = D_in_inv_sqrt * (W.T @ (D_out_inv_sqrt * signal))
         dt         = 0.5
         energy     = (1 - dt) * signal + dt * propagated
         fired      = (energy > self.cfg.threshold).float()
@@ -160,21 +163,25 @@ class HubFormationEngine:
         self.fire_count += fired
         self.wm.record_fire(fired)
 
-        # 2. Oja's Rule: Δw_ij = η * y_i * (x_j - y_i * w_ij)
-        #    y = fired (post-synaptic), x = signal (pre-synaptic)
-        #    헤비안 강화 - y_i² * w_ij 정규화 항으로 W 자동 L2 정규화
-        #    효과: 허브 가중치 폭발 방지, PCA 1st PC 방향으로 수렴
-        y   = fired                                          # post [N]
-        x   = signal                                         # pre  [N]
-        oja = torch.outer(y, x) - (y * y).unsqueeze(1) * W  # [N,N]
+        # 2. Oja's Rule: Δw_ij = η * y_i * (x_j - y_i * w_ij)  (textbook: W[post][pre])
+        #    코드 컨벤션 W[u][v] = u→v 엣지 (u=pre, v=post) 이므로 textbook 대비 transpose.
+        #    강화 텀 : W[u][v] += η · signal[u] · fired[v]      = pre·post 공동발화
+        #    정규화  : W[u][v] -= η · fired[v]² · W[u][v]        = post² normalization
+        #    효과    : 허브 폭발 방지, PCA 1st PC 방향으로 수렴
+        pre  = signal                                        # [N] pre-synaptic
+        post = fired                                         # [N] post-synaptic
+        oja  = torch.outer(pre, post) - (post * post).unsqueeze(0) * W  # [N,N]
         oja.fill_diagonal_(0)
         self.wm.W += self.cfg.hebbian_lr * oja
         self.wm.W.clamp_(0, 1)
 
-        # 3. 허브 감지
+        # 3. 허브 감지 — PageRank 기반 (LeCun review A2)
+        #    pr 는 확률 분포 (합=1) 이므로 노드 수에 독립적인 threshold 를 위해
+        #    pr * N 을 비교 — "1/N 대비 몇 배" 중심성인지 판단.
         prev_hub = self.is_hub.clone()
-        in_str   = self.wm.W.sum(dim=0)
-        self.is_hub = in_str > self.cfg.hub_threshold
+        pr       = self.pagerank()
+        pr_rel   = pr * self.wm.n                          # [N] 평균 대비 배수
+        self.is_hub = pr_rel > self.cfg.hub_pr_threshold
 
         # 이벤트 로깅
         promoted = (~prev_hub & self.is_hub).nonzero(as_tuple=True)[0].tolist()
@@ -192,19 +199,29 @@ class HubFormationEngine:
     def pagerank(self, alpha: float = 0.85,
                  tol: float = 1e-5, max_iter: int = 30) -> torch.Tensor:
         """
-        PageRank (Power Iteration)
-        r = α * W_col_norm^T * r + (1-α)/N
-        반환: [N] 노드 중요도 벡터 (합=1)
-        허브-of-hub 감지: 중요한 노드에 연결될수록 높은 점수
+        PageRank (Power Iteration) — W[u][v] = u→v 엣지 convention.
+
+        표준 수식:
+            PR(v) = (1-α)/N + α · Σ_{u: u→v} PR(u) / out_deg(u)
+
+        out-degree 정규화를 쓴다 (발신자 u 의 rank 가 out-link 수만큼 분배).
+        행렬 형태: M[v][u] = W[u][v] / out_deg(u)  →  r = α·M·r + tp
+                  M.T[u][v] = W[u][v] / out_deg(u)  →  M = (W / out_deg).T
+
+        반환: [N] 노드 중요도 벡터 (합=1), 허브-of-hub 감지용.
         """
-        W   = self.wm.W
-        N   = W.shape[0]
-        col = W.sum(dim=0, keepdim=True).clamp(min=1e-8)
-        Wc  = W / col                               # column-normalized
-        r   = torch.ones(N, device=W.device) / N
-        tp  = (1 - alpha) / N                       # teleport probability
+        W       = self.wm.W
+        N       = W.shape[0]
+        out_deg = W.sum(dim=1)                                 # [N] 발신자 out-degree
+        dangling_mask = (out_deg < 1e-8)                       # terminal / 끊긴 노드
+        out_safe = out_deg.clamp(min=1e-8).unsqueeze(1)        # [N,1]
+        Wr      = W / out_safe                                 # row-normalized
+        r       = torch.ones(N, device=W.device) / N
+        tp      = (1 - alpha) / N
         for _ in range(max_iter):
-            r_new = alpha * (Wc.T @ r) + tp
+            # dangling 노드의 rank 는 균등 재분배 (표준 PR 처리, 누설 방지)
+            dangling_r = float(r[dangling_mask].sum()) / N if bool(dangling_mask.any()) else 0.0
+            r_new = alpha * (Wr.T @ r + dangling_r) + tp
             if (r_new - r).abs().max() < tol:
                 break
             r = r_new
@@ -663,10 +680,14 @@ class ActivationEngine:
 
     def _extract(self, data):
         label = ""
-        kws   = set()
+        kws: set[str] = set()
         if isinstance(data, dict):
             label = str(data.get("label", "")).lower()
-            kws   = {str(v).lower() for v in data.values() if isinstance(v, str)}
+            # 각 문자열 값을 공백 split 하여 개별 키워드로 편입
+            # (dict value 자체를 한 덩어리로 쓰면 tag 매칭 확률이 급감)
+            for v in data.values():
+                if isinstance(v, str):
+                    kws.update(v.lower().split())
         elif isinstance(data, str):
             kws = set(data.lower().split())
         return label, kws

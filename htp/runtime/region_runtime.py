@@ -18,6 +18,8 @@ HTPRuntime을 상속하고 다음을 추가:
 from __future__ import annotations
 
 import math
+import statistics
+from collections import deque
 from typing import Optional, Any
 
 import torch
@@ -59,6 +61,11 @@ class RegionRuntime(HTPRuntime):
         self._cusum_S   : float = 0.0
         self._cusum_k   : float = 0.25   # 허용 농도 수준 (0=균일 ~ 1=완전집중)
         self._cusum_h   : float = 2.0    # 알람 임계값
+
+        # [Stage 3-B2] Friston precision: 최근 fire_rate 히스토리 → variance 역수 proxy.
+        # 목적: 안정 Region 은 precision ↑ → CoreCells gate 에서 amplification.
+        # 생물학: ACh / NE 신경조절계의 precision 조절 (attentional gain).
+        self._rate_history : deque[float] = deque(maxlen=10)
 
     # ── 빌드 (NGE 통합) ────────────────────────────────
 
@@ -126,6 +133,18 @@ class RegionRuntime(HTPRuntime):
         self._cusum_S = max(0.0, self._cusum_S + concentration - self._cusum_k)
         overload = self._cusum_S > self._cusum_h
 
+        # [Stage 3-B2] precision 계산 — fire_rate variance 의 역수 proxy.
+        #   안정 발화 (variance 작음) → precision ↑
+        #   노이지한 발화 (variance 큼) → precision ↓
+        #   clamp [0.1, 5.0] 로 극단값 방지.
+        self._rate_history.append(fire_rate)
+        if len(self._rate_history) >= 3:
+            var       = statistics.pvariance(self._rate_history)
+            precision = 1.0 / (var + 0.01)
+            precision = min(max(precision, 0.1), 5.0)
+        else:
+            precision = 1.0
+
         return RegionSignal(
             region_id    = self.region_name,
             hub_strength = hub_strength,
@@ -133,6 +152,7 @@ class RegionRuntime(HTPRuntime):
             top_hubs     = top_hubs,
             overload     = overload,
             output_vec   = self.wm.W.sum(dim=1).detach().clone(),
+            precision    = precision,
         )
 
     def apply_suppression(self, strength: float):
