@@ -12,7 +12,9 @@ Stage 6 EmbeddingBridge 가 동일 Protocol 의 다른 구현이 됨.
 """
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+import pickle
+from pathlib import Path
+from typing  import Protocol, runtime_checkable
 
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -92,6 +94,36 @@ class TfidfJLEncoder:
 
         norm = float(np.linalg.norm(x))
         return x / norm if norm > 1e-8 else x
+
+    # ── 영속화 (Critical Gap #3 옵션 A-2) ──────────────────
+    def save(self, path: Path | str) -> None:
+        """fitted state 를 pickle 로 영속화.
+
+        Critical Gap #3 (CLI 다중 호출): 인메모리 _fitted 만으로는 부족.
+        매 프로세스에서 동일 임베딩 공간 보장하려면 fit 결과 영속화 필요.
+        """
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("wb") as f:
+            pickle.dump({
+                "dim":     self._dim,
+                "tfidf":   self._tfidf,
+                "jl":      self._jl,
+                "fitted":  self._fitted,
+            }, f)
+
+    def load(self, path: Path | str) -> bool:
+        """저장된 state 복원. 성공 시 True, 파일 없으면 False."""
+        p = Path(path)
+        if not p.exists():
+            return False
+        with p.open("rb") as f:
+            state = pickle.load(f)
+        self._dim    = state["dim"]
+        self._tfidf  = state["tfidf"]
+        self._jl     = state["jl"]
+        self._fitted = state["fitted"]
+        return True
 
 
 __all__ = ["TextEncoder", "TfidfJLEncoder"]

@@ -94,15 +94,28 @@ class KnowledgeLoop:
         self.discover_threshold  = discover_threshold
         self._cache: list[KnowledgeEntry] = self.store.load_all()
 
+        # Critical Gap #3 옵션 A-2: encoder state 영속화.
+        # CLI 다중 호출 시 동일 임베딩 공간 보장 — fit 결과를 디스크에 저장/복원.
+        self._encoder_state_path = self.store.path.parent / "encoder_state.pkl"
+        if hasattr(self.encoder, "load"):
+            self.encoder.load(self._encoder_state_path)
+
     # ── ingest ────────────────────────────────────────────
     def ingest(self, text: str, source: str = "") -> IngestResult:
-        corpus = [e.text for e in self._cache] + [text]
-        self.encoder.fit(corpus)
+        # Critical Gap #3 (옵션 A-2): encoder.fit() 1회 freeze + 영속화.
+        # 첫 ingest 시점에만 fit, 이후엔 동일 임베딩 공간 유지.
+        # CLI 다중 프로세스에서도 .htp/encoder_state.pkl 로 복원되어 동일 공간.
+        # 트레이드오프: 새 어휘 미반영 — sub-5 EmbeddingBridge 에서 본질 해결.
+        if not getattr(self.encoder, "_fitted", False):
+            corpus = [e.text for e in self._cache] + [text]
+            self.encoder.fit(corpus)
+            # fit 직후 영속화 — 다음 프로세스에서 동일 state 복원
+            if hasattr(self.encoder, "save"):
+                self.encoder.save(self._encoder_state_path)
+
         vec = self.encoder.encode(text)
 
-        # 기존 캐시는 새 encoder 로 재-encode 해야 동일 공간 비교 가능
-        for e in self._cache:
-            e.vec = self.encoder.encode(e.text)
+        # encoder 가 freeze 되므로 _cache 재-encode 불필요 (이전 옵션 B 제거).
 
         neighbors = self._find_neighbors(vec, top_k=5)
         conflicts  = [n for n in neighbors if n.similarity < self.conflict_threshold]

@@ -141,3 +141,68 @@ def test_loop_empty_state(fresh_loop):
 
     discoveries = fresh_loop.discover()
     assert discoveries == []
+
+
+# ══════════════════════════════════════════════════════════
+# Test 6 (Critical Gap #3 옵션 A-2): encoder state 영속화
+# ══════════════════════════════════════════════════════════
+
+def test_encoder_save_load_round_trip(tmp_path):
+    """fit 한 encoder 를 save/load 후 동일 vec 재현되어야 함."""
+    enc1 = TfidfJLEncoder(dim=64)
+    enc1.fit(["content addressable memory pattern recall",
+              "Hopfield network pattern recall energy",
+              "Redis key value lookup protocol"])
+    vec1 = enc1.encode("pattern recall memory")
+
+    state_path = tmp_path / "encoder_state.pkl"
+    enc1.save(state_path)
+
+    enc2 = TfidfJLEncoder(dim=64)
+    assert enc2.load(state_path) is True
+    vec2 = enc2.encode("pattern recall memory")
+
+    np.testing.assert_allclose(vec1, vec2, rtol=1e-10,
+        err_msg="save/load round-trip 으로 vec 재현 실패")
+
+
+def test_loop_persists_encoder_across_instances(tmp_path):
+    """KnowledgeLoop 를 두 번 생성해도 같은 텍스트 → 같은 vec.
+
+    Critical Gap #3 (CLI 다중 호출) 회귀 보호:
+    인스턴스1 에서 fit + ingest → 인스턴스2 에서 동일 text encode 시 동일 vec.
+    """
+    store = KnowledgeStore(tmp_path / "knowledge_log.jsonl")
+
+    # 인스턴스 1: 3개 ingest (corpus 충분히 커서 JL 활성화)
+    loop1 = KnowledgeLoop(encoder=TfidfJLEncoder(), store=store)
+    loop1.ingest("content addressable memory pattern recall by content "
+                 "distributed representation neural ensemble",
+                 source="brain")
+    loop1.ingest("Hopfield network attention transformer energy minimization "
+                 "pattern recall vector representation", source="ai")
+    loop1.ingest("Redis cache key value lookup database protocol storage "
+                 "distributed system", source="infra")
+
+    cached_vec = loop1._cache[0].vec.copy()
+
+    # 인스턴스 2: 같은 store 로 새로 생성 (CLI 다중 호출 시뮬레이션)
+    loop2 = KnowledgeLoop(encoder=TfidfJLEncoder(), store=store)
+
+    # encoder state 가 로드되어 동일 임베딩 공간이어야 함
+    re_encoded = loop2.encoder.encode(loop2._cache[0].text)
+    np.testing.assert_allclose(cached_vec, re_encoded, rtol=1e-10,
+        err_msg="CLI 다중 호출 시 동일 임베딩 공간 보장 실패")
+
+
+def test_loop_encoder_state_file_created(tmp_path):
+    """첫 ingest 후 .htp/encoder_state.pkl 파일이 실제 생성되는지."""
+    store = KnowledgeStore(tmp_path / "knowledge_log.jsonl")
+    state_path = tmp_path / "encoder_state.pkl"
+
+    assert not state_path.exists()
+
+    loop = KnowledgeLoop(encoder=TfidfJLEncoder(), store=store)
+    loop.ingest("first ingest creates encoder state file", source="test")
+
+    assert state_path.exists(), "첫 ingest 후 encoder_state.pkl 미생성"
