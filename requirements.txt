@@ -5,3 +5,5 @@ torch>=2.0.0
 # dev
 pytest>=8.0
 pytest-timeout>=2.3
+scikit-learn>=1.0
+numpy>=1.20

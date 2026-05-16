@@ -19,6 +19,12 @@ from __future__ import annotations
 from .config import HubConfig, PruneConfig, ActivationConfig
 # Step 3: WeightMatrix 는 torch 만 의존 (DAG 안전)
 from .weight_matrix import WeightMatrix
+# Step 4: HubFormationEngine 은 WeightMatrix + HubConfig 만 의존 (DAG 안전)
+from .hub_formation import HubFormationEngine
+# Step 5: PruningEngine 은 WM + HFE + PruneConfig 만 의존 (DAG 안전)
+from .pruning import PruningEngine, PruneStrategy
+# Step 6: ActivationEngine + Node + decorators 는 WM + HFE + ActivationConfig 만 의존
+from .activation import ActivationEngine, Node, RunResult, tag, terminal, FIRE_FLOOR
 
 
 # NGE 관련 심볼은 lazy 로드 — htp_runtime → htp.core → NGE → htp_runtime 순환을 회피.
@@ -45,6 +51,18 @@ __all__ = [
     "ActivationConfig",
     # Step 3 — WeightMatrix
     "WeightMatrix",
+    # Step 4 — HubFormationEngine
+    "HubFormationEngine",
+    # Step 5 — PruningEngine
+    "PruningEngine",
+    "PruneStrategy",
+    # Step 6 — ActivationEngine + Node + decorators
+    "ActivationEngine",
+    "Node",
+    "RunResult",
+    "tag",
+    "terminal",
+    "FIRE_FLOOR",
     # NGE (lazy)
     "NodeGenerationEngine",
     "GenConfig",

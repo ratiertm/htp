@@ -36,8 +36,8 @@
       "automationLevel": 2
     },
     "htp-review-improvements": {
-      "phase": "do",
-      "matchRate": null,
+      "phase": "completed",
+      "matchRate": 99,
       "startedAt": "2026-05-16T00:00:00Z",
       "scope": "Phase A: HIGH 1+2 (HTPConfig DI + htp_runtime.py 분할)",
       "backlog": [
@@ -76,13 +76,162 @@
         "step-1": "completed",
         "step-2": "completed",
         "step-3": "completed",
-        "step-4": "pending",
-        "step-5": "pending",
-        "step-6": "pending",
-        "step-7": "pending"
+        "step-4": "completed",
+        "step-5": "completed",
+        "step-6": "completed",
+        "step-7": "completed"
       },
-      "lastRegressionPass": "57/57",
-      "session1Complete": true
+      "lastRegressionPass": "57/57 regression + 16/16 unit",
+      "session1Complete": true,
+      "session2Complete": true,
+      "htp_runtime_line_count": 246,
+      "session3Complete": true,
+      "testCount": {
+        "regression": 57,
+        "unit": 46,
+        "total": 103
+      },
+      "analysisDoc": "docs/03-analysis/htp-review-improvements.analysis.md",
+      "criticalGaps": 0,
+      "outOfScopeGaps": 3,
+      "completedAt": "2026-05-16",
+      "reportDoc": "docs/04-report/htp-review-improvements.report.md"
+    },
+    "htp-thalamus-car": {
+      "phase": "check (sub-1)",
+      "matchRate": 98,
+      "startedAt": "2026-05-16",
+      "planDoc": "docs/01-plan/features/htp-thalamus-car.plan.md",
+      "designDoc": "htp_thalamus_car_design v4.md",
+      "stages": {
+        "stage-0": "pending  — Config 분리",
+        "stage-0.5": "pending  — Knowledge Loop MVP (v4 신규)",
+        "stage-1": "pending  — RegionSignature + CAR",
+        "stage-2": "pending  — Hybrid 검증",
+        "stage-3": "pending  — CoherenceGate + Memory",
+        "stage-4": "pending  — ExternalRegion + LLMRegion (+ MED-4 보완 4건)",
+        "stage-5": "pending  — PipelinedBrainRuntime",
+        "stage-6": "pending  — EmbeddingBridge (experiment branch)",
+        "stage-7": "pending  — vector default"
+      },
+      "gaps_addressed": [
+        "G1: 시맨틱 라우팅 부재",
+        "G2: Temporal binding 없음",
+        "G3: LLM 그래프 고립",
+        "G4: 실사용 루프 부재 (v4 신규)"
+      ],
+      "absorbs_backlog": [
+        "MED-4: LLMNode/CostRouter 사용 흐름 강화 (G3로 흡수)"
+      ],
+      "med4_g3_supplements": [
+        "C-1: LLMRegion 사용 데모 추가",
+        "C-2: LLMNode 처리 정책 결정 (Stage 4 Design)",
+        "C-3: CostRouter 기존 7-method 보존",
+        "C-4: graphify isolated 50% 감소 정량 기준"
+      ],
+      "outOfScope": [
+        "MED-3 대시보드 BrainRuntime/Memory 반영",
+        "LOW-5 Friston B3 simulation",
+        "LOW-6 NGE param simulation",
+        "LOW-7 Memory CUSUM boundary",
+        "LOW-8 compress_dim re-check",
+        "Multi-head attention",
+        "ModalEncoder",
+        "Continuous token",
+        "PredictiveRegion",
+        "Incremental PCA",
+        "Lateral inhibition"
+      ],
+      "planRev": "0.2",
+      "cumulative_tests": {
+        "stage-0": 60,
+        "stage-0.5": 65,
+        "stage-1": 75,
+        "stage-2": 78,
+        "stage-3": 84,
+        "stage-4": 87,
+        "stage-5": 89,
+        "stage-6": "separate 4",
+        "stage-7": "89 re-run"
+      },
+      "mainline_new_tests": "27–30 (was 22–25)",
+      "estimated_duration": "~9–9.5 weeks (was ~8.5)",
+      "designDocPlan": "docs/02-design/features/htp-thalamus-car.design.md",
+      "selectedArchitecture": "C — Phase Sub-Cycles (6 sub-cycles)",
+      "selectedTextEncoder": "α — sklearn TfidfVectorizer + GaussianRandomProjection",
+      "knowledgeLogStorage": "JSON file (.htp/knowledge_log.jsonl)",
+      "subCycles": {
+        "sub-1": {
+          "stages": [
+            "stage-0",
+            "stage-0.5"
+          ],
+          "phase": "check complete",
+          "cumTests": 65,
+          "testsActual": "115 (regression 57 + unit 49 + knowledge 5 + DAG ext 4 parametrize)",
+          "matchRate": 98
+        },
+        "sub-2": {
+          "stages": [
+            "stage-1",
+            "stage-2"
+          ],
+          "phase": "pending",
+          "cumTests": 78
+        },
+        "sub-3": {
+          "stages": [
+            "stage-3"
+          ],
+          "phase": "pending",
+          "cumTests": 84
+        },
+        "sub-4": {
+          "stages": [
+            "stage-4",
+            "stage-5"
+          ],
+          "phase": "pending",
+          "cumTests": 89
+        },
+        "sub-5": {
+          "stages": [
+            "stage-6"
+          ],
+          "phase": "pending (experiment branch)",
+          "cumTests": "separate 4"
+        },
+        "sub-6": {
+          "stages": [
+            "stage-7"
+          ],
+          "phase": "pending",
+          "cumTests": "89 re-run"
+        }
+      },
+      "session_a_complete": true,
+      "session_a_results": {
+        "step-0a": "completed (config 4 sub-config + facade extension)",
+        "step-0b": "completed (3 new tests, 106/106 passing)",
+        "step-0.5a": "completed (TextEncoder Protocol + TfidfJLEncoder)",
+        "step-0.5b": "completed (KnowledgeStore JSONL)",
+        "step-0.5c": "completed (KnowledgeLoop + 5 dataclass)",
+        "smoke_discover": "FAIL — 0 cross-domain discoveries with threshold 0.6 (Plan Risk 6 surfaced early; tune in Session B)"
+      },
+      "session_b_complete": true,
+      "session_b_results": {
+        "step-0.5-cli": "completed (htp/knowledge/__main__.py — argparse, ingest/query/discover)",
+        "step-0.5-test": "completed (5 tests in tests/knowledge/test_loop.py, 115/115 passing)",
+        "dag_extension": "completed (test_no_circular_deps.py parametrize 확장: htp/knowledge/*.py 검증)",
+        "go_no_go_scenario": "PASS — brain↔ai 0.53 > brain↔infra 0.14 (threshold=0.05)",
+        "notable": "discover_threshold default 0.6은 TF-IDF+JL 분포에서 너무 높음 — CLI --threshold 옵션 또는 KnowledgeLoop 생성자로 조정. Stage 6 EmbeddingBridge에서 임계값 재검토."
+      },
+      "analysisDoc": "docs/03-analysis/htp-thalamus-car.analysis.md",
+      "criticalGaps": 0,
+      "knownGaps": [
+        "Gap #1: discover_threshold default 0.6 too high for TF-IDF+JL (Low — CLI --threshold 회피)",
+        "Gap #2: htp/__init__.py knowledge 미export (None — Design §7.2 명시 결정)"
+      ]
     }
   },
   "pipeline": {
@@ -112,5 +261,6 @@
     "stateFile": ".bkit/runtime/agent-state.json",
     "eventsFile": ".bkit/runtime/agent-events.jsonl"
   },
-  "phase": "do"
+  "phase": "design",
+  "currentFeature": "htp-thalamus-car"
 }

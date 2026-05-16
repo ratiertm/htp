@@ -25,18 +25,24 @@
 
 ---
 
-## 현재 구현 상태 (Phase 1–4 + Review Feedback 완료)
+## 현재 구현 상태 (Phase 1–4 + Review Feedback + Review Improvements 완료)
 
-### 파일 구조
+### 파일 구조 (htp-review-improvements Session 1-3 반영, 2026-05-16)
 
 ```
 htp/
 ├── __init__.py                          공개 API
-├── core/
-│   ├── __init__.py                     NGE 만 export
-│   └── node_generation_engine.py        split / sprout / interpolate
-├── runtime/
-│   ├── htp_runtime.py                   WeightMatrix + Oja + PageRank + HTPRuntime
+├── core/                                [Phase 1 엔진 분리, DAG: torch만 의존]
+│   ├── __init__.py                     PEP 562 lazy NGE loader + sub-config eager export
+│   ├── config.py                       HubConfig + PruneConfig + ActivationConfig + HTPConfig facade
+│   ├── weight_matrix.py                WeightMatrix (W[u][v] 단일 소유)
+│   ├── hub_formation.py                HubFormationEngine (Oja + PageRank)
+│   ├── pruning.py                      PruningEngine + PruneStrategy (4 strategies + hub_protect)
+│   ├── activation.py                   ActivationEngine + Node + tag/terminal + FIRE_FLOOR
+│   └── node_generation_engine.py        NodeGenerationEngine (split / sprout / interpolate)
+├── runtime/                             [오케스트레이션, htp/core/* import 가능]
+│   ├── htp_runtime.py                   HTPRuntime (≤250줄 — Step 7 SUCCESS) + re-exports
+│   ├── _demo.py                        12/12 라우팅 데모 (Step 7 분리)
 │   ├── region_runtime.py                HTPRuntime 확장 + precision proxy
 │   ├── brain_runtime.py                 PFCRuntime + BrainRuntime + Memory 연동
 │   ├── async_brain_runtime.py           비동기 실행
@@ -60,11 +66,11 @@ htp/
     └── cost_router.py                   API 비용 기반 라우팅
 
 archive/deprecated_phase1/               [Stage 2-A1 정리]
-├── hub_formation_engine.py              구 BCM-like (runtime/htp_runtime.py 로 이관)
+├── hub_formation_engine.py              구 BCM-like
 ├── pruning_engine.py                    구 3전략 프루닝
 └── activation_engine.py                 구 캐스케이드 엔진
 
-tests/regression/                        [Stage 1 신규]
+tests/regression/                        [Stage 1 신규, 57개]
 ├── test_phase1_routing.py               12/12 시맨틱 라우팅
 ├── test_phase1_hub_formation.py         Oja, PageRank, uneven centrality
 ├── test_phase1_pruning.py               4전략 + 허브 보호
@@ -78,7 +84,25 @@ tests/regression/                        [Stage 1 신규]
 ├── test_stage3_b4_softmax_prior.py      TopDownBias Softmax
 ├── test_stage5_memory.py                L2/L3/MemorySystem 단위
 └── test_stage5_integration.py           BrainRuntime+Memory end-to-end
+
+tests/unit/                              [Review Improvements 신규, 46개]
+├── test_engine_di.py                    Constructor DI 영구 검증 (HFE/PE/AE sub-config)
+├── test_config_isolation.py             HTPConfig facade backward-compat 영구 보호
+├── test_import_paths.py                 4 import 경로 동일 객체 검증
+└── test_no_circular_deps.py             DAG 강제 (htp/core ↔ htp/runtime 단방향)
 ```
+
+### DAG 의존 방향 (Review Improvements 강제)
+
+```
+htp/__init__.py
+    ↓
+htp/runtime/* ──→ htp/core/*  ──→ torch + dataclasses (단방향)
+                    ↑
+                node_generation_engine (예외, 향후 분리)
+```
+
+`htp/core/*` 는 `htp/runtime/*` 를 import 하지 못한다 (`test_no_circular_deps.py` 가 영구 검증).
 
 ### 핵심 클래스
 
