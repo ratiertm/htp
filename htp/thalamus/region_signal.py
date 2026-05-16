@@ -15,9 +15,12 @@ ThalamusOutput: 시상 → PFC 압축 신호
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import torch
+
+if TYPE_CHECKING:
+    from .signature import RegionSignature
 
 
 @dataclass
@@ -32,6 +35,9 @@ class RegionSignal:
     precision:    float = 1.0   # [Stage 3-B1] Friston precision. 높을수록 신뢰도 ↑,
                                 # CoreCells gate 에서 score 를 amplification 하는 scaler.
                                 # 1.0 = 중립. Stage 3-B2 에서 Region 이 동적 계산.
+    region_signature: "RegionSignature | None" = None
+    """[sub-2 Stage 1 M5] Region 의 의미 중심점. content-addressable routing 에서
+    VectorRouter 가 query_vec 과 cosine similarity 계산. None 이면 cold start."""
 
 
 @dataclass
