@@ -27,7 +27,6 @@ from htp.runtime.htp_runtime import (
 cfg = HTPConfig(
     n_nodes         = 64,
     threshold       = 0.45,
-    hub_threshold   = 3.0,
     hebbian_lr      = 0.08,
     decay_rate      = 0.005,
     prune_threshold = 0.02,
@@ -196,11 +195,11 @@ async def websocket_endpoint(websocket: WebSocket):
         "positions": NODE_POSITIONS,
         "pos4d":     NODE_POS4D,
         "config": {
-            "threshold":     cfg.threshold,
-            "hub_threshold": cfg.hub_threshold,
-            "hebbian_lr":    cfg.hebbian_lr,
-            "decay_rate":    cfg.decay_rate,
-            "n_nodes":       cfg.n_nodes,
+            "threshold":        cfg.threshold,
+            "hub_pr_threshold": cfg.hub_pr_threshold,
+            "hebbian_lr":       cfg.hebbian_lr,
+            "decay_rate":       cfg.decay_rate,
+            "n_nodes":          cfg.n_nodes,
         },
     }))
 

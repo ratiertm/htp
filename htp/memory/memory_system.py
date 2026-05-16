@@ -117,22 +117,15 @@ class MemorySystem:
         CUSUM overload = 피질 과부하 = 수면 신호.
         SWR 태깅 → Online Hebbian consolidation 실행.
         """
+        # 1. SWR 태깅 (novelty × score 가 높은 에피소드들)
         self.l2.tag_swr(priority_threshold=self.SWR_PRIORITY_THRESHOLD)
 
-        # 전체 SWR-tagged 에피소드 가져오기 — zero 벡터로 무관 검색
-        sample = self.l2.recent(1)
-        if sample and sample[0].state_vec:
-            probe = bytes_to_tensor(sample[0].state_vec)
-            zero = torch.zeros_like(probe)
-            tagged = self.l2.search_similar(
-                zero, top_k=self.CONSOLIDATE_TOP_K, swr_only=True,
-            )
-            # 위 search_similar 는 유사도 정렬이지만 swr_only=True 필터가 먼저 적용됨.
-            # 만약 zero 벡터와 유사도가 0 인 항목이 다수이면 그 중 임의 순.
-        else:
-            tagged = []
+        # 2. 태깅된 에피소드들 조회 (최신순)
+        tagged = self.l2.get_swr_tagged(limit=self.CONSOLIDATE_TOP_K)
 
-        self.l3.consolidate(tagged)
+        # 3. L3 패턴 저장소에 통합 (Online Hebbian EMA)
+        if tagged:
+            self.l3.consolidate(tagged)
 
     # ── 사후 평가 ────────────────────────────────
 

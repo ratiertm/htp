@@ -24,7 +24,7 @@ def simple_runtime():
     from htp import HTPConfig, HTPRuntime, tag, terminal
 
     rt = HTPRuntime(HTPConfig(
-        hub_threshold=1.5,
+        hub_pr_threshold=2.5,
         hebbian_lr=0.13,
         decay_rate=0.005,
         prune_threshold=0.02,

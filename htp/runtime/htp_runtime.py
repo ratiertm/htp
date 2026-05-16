@@ -36,83 +36,124 @@ from typing import Callable, Any, Optional, Set, List, Dict, Tuple
 from enum import Enum
 import torch
 
+from htp.core.config        import HubConfig, PruneConfig, ActivationConfig
+from htp.core.weight_matrix import WeightMatrix  # Re-exported below (Step 3)
+
 
 # ======================================================
-# 설정
+# 설정 (Facade — Design Ref: htp-review-improvements §2.3, Step 1)
 # ======================================================
-
-@dataclass
+#
+# HTPConfig 는 sub-config(HubConfig/PruneConfig/ActivationConfig) 들을 묶는 facade.
+# Backward compatibility 를 위해 다음을 보존한다:
+#   - flat 키워드 생성자:  HTPConfig(hub_pr_threshold=3.0)  → self.hub.hub_pr_threshold = 3.0
+#   - flat 속성 접근:      cfg.hub_pr_threshold              → self.hub.hub_pr_threshold (via __getattr__)
+#   - top-level 필드:      n_nodes, device 는 모든 엔진이 공유하므로 facade 본체에 유지
+#
+# 새 권장 사용 방식 (옵션):
+#   HTPConfig(hub=HubConfig(hub_pr_threshold=3.0))
+#
 class HTPConfig:
-    n_nodes:          int   = 64
-    threshold:        float = 0.35  # 노드 발화 임계값
-    hub_threshold:    float = 1.5   # [DEPRECATED] in_strength sum 기반 허브 승격 — 현재 미사용
-    hub_pr_threshold: float = 2.5   # PageRank 기준 허브 승격 (1/N 대비 배수)
-    hebbian_lr:       float = 0.13  # 헤비안 학습률
-    # Pruning 설정
-    decay_rate:      float = 0.005  # 시간 감쇠율 (매 스텝)
-    prune_threshold: float = 0.02   # 이 이하면 엣지 제거
-    usage_window:    int   = 20     # 사용 빈도 측정 윈도우 (스텝)
-    usage_min:       float = 0.05   # 윈도우 내 최소 발화 비율
-    redundancy_cos:  float = 0.95   # 코사인 유사도 임계값 (중복 노드 감지)
-    # 허브 보호 + age 전략
-    hub_protect:     bool  = True   # 허브 노드 관여 연결 보호
-    age_threshold:   int   = 100    # age 전략: 이 스텝 이상 강화 없으면 제거
-    device: str = "cuda" if torch.cuda.is_available() else "cpu"
+    """
+    Facade over Phase 1 sub-configs.
+
+    Top-level fields (shared across engines):
+      - n_nodes: int      네트워크 노드 수
+      - device:  str      torch device ('cpu' or 'cuda')
+
+    Sub-configs (engine-specific):
+      - hub:        HubConfig         HubFormationEngine 파라미터
+      - prune:      PruneConfig       PruningEngine 파라미터
+      - activation: ActivationConfig  ActivationEngine 파라미터 (현재 비어있음)
+
+    Backward-compat constructors (모두 동등):
+        HTPConfig()
+        HTPConfig(n_nodes=128)
+        HTPConfig(hub_pr_threshold=3.0)             # flat 키워드 → self.hub 로 위임
+        HTPConfig(hub=HubConfig(hub_pr_threshold=3.0))   # 새 권장 방식
+    """
+
+    __slots__ = ("n_nodes", "device", "hub", "prune", "activation")
+
+    def __init__(self,
+                 n_nodes:    int = 64,
+                 device:     Optional[str] = None,
+                 hub:        Optional[HubConfig]        = None,
+                 prune:      Optional[PruneConfig]      = None,
+                 activation: Optional[ActivationConfig] = None,
+                 **kwargs: Any):
+        # Top-level shared
+        object.__setattr__(self, "n_nodes", n_nodes)
+        object.__setattr__(self, "device",
+                           device if device is not None
+                           else ("cuda" if torch.cuda.is_available() else "cpu"))
+        # Sub-configs (factory defaults)
+        object.__setattr__(self, "hub",        hub        if hub        is not None else HubConfig())
+        object.__setattr__(self, "prune",      prune      if prune      is not None else PruneConfig())
+        object.__setattr__(self, "activation", activation if activation is not None else ActivationConfig())
+
+        # Flat-keyword backward compat:
+        # dispatch each unknown kwarg to the first sub-config that owns it.
+        for k, v in kwargs.items():
+            assigned = False
+            for sub in (self.hub, self.prune, self.activation):
+                if hasattr(sub, k):
+                    setattr(sub, k, v)
+                    assigned = True
+                    break
+            if not assigned:
+                raise TypeError(
+                    f"HTPConfig got unexpected keyword argument: {k!r}. "
+                    f"Known top-level: n_nodes/device/hub/prune/activation. "
+                    f"Known sub-config fields: "
+                    f"{sorted(set(HubConfig.__dataclass_fields__) | set(PruneConfig.__dataclass_fields__) | set(ActivationConfig.__dataclass_fields__))}"
+                )
+
+    # ── Backward-compat attribute access ────────────────────
+    # __getattr__ is only called when normal lookup fails (i.e., not in __slots__).
+    # Forward unknown attribute reads to the appropriate sub-config.
+    def __getattr__(self, name: str) -> Any:
+        # NOTE: __slots__ fields go through normal lookup, not here.
+        sub_dict = (
+            ("hub",        HubConfig.__dataclass_fields__),
+            ("prune",      PruneConfig.__dataclass_fields__),
+            ("activation", ActivationConfig.__dataclass_fields__),
+        )
+        for sub_name, fields in sub_dict:
+            if name in fields:
+                return getattr(getattr(self, sub_name), name)
+        raise AttributeError(f"'HTPConfig' object has no attribute {name!r}")
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        # Allow direct set of __slots__ fields
+        if name in ("n_nodes", "device", "hub", "prune", "activation"):
+            object.__setattr__(self, name, value)
+            return
+        # Flat field assignment: route to the sub-config that owns it
+        sub_dict = (
+            ("hub",        HubConfig.__dataclass_fields__),
+            ("prune",      PruneConfig.__dataclass_fields__),
+            ("activation", ActivationConfig.__dataclass_fields__),
+        )
+        for sub_name, fields in sub_dict:
+            if name in fields:
+                setattr(object.__getattribute__(self, sub_name), name, value)
+                return
+        raise AttributeError(
+            f"Cannot set unknown HTPConfig attribute: {name!r}. "
+            f"To add new fields, edit the appropriate sub-config in htp/core/config.py"
+        )
+
+    def __repr__(self) -> str:
+        return (f"HTPConfig(n_nodes={self.n_nodes}, device={self.device!r}, "
+                f"hub={self.hub}, prune={self.prune}, activation={self.activation})")
 
 
 # ======================================================
-# WeightMatrix  -  W 행렬 단일 소유, 세 엔진이 참조
+# WeightMatrix  -  htp/core/weight_matrix.py 로 이전됨 (Step 3)
+# 위 ``from htp.core.weight_matrix import WeightMatrix`` 가 re-export 역할.
+# 사용자 코드의 `from htp.runtime.htp_runtime import WeightMatrix` 는 그대로 동작.
 # ======================================================
-
-class WeightMatrix:
-    """
-    연결 가중치 행렬 W[u][v].
-    - 세 엔진이 이 객체의 참조를 공유
-    - 쓰기는 HubFormationEngine(헤비안) + PruningEngine(제거)
-    - 읽기는 ActivationEngine(전파 계산)
-    """
-
-    def __init__(self, n: int, device: str):
-        self.n   = n
-        self.dev = device
-        self.W   = torch.zeros(n, n, device=device)
-        self._step = 0
-
-        # 히스토리: 각 노드의 스텝별 발화 기록 (usage pruning용)
-        self.fire_history: list[torch.Tensor] = []
-
-    def set(self, u: int, v: int, w: float):
-        self.W[u][v] = w
-
-    def get(self, u: int, v: int) -> float:
-        return float(self.W[u][v])
-
-    def row(self, u: int) -> torch.Tensor:
-        return self.W[u]
-
-    def col(self, v: int) -> torch.Tensor:
-        return self.W[:, v]
-
-    def in_strength(self, v: int) -> float:
-        return float(self.W[:, v].sum())
-
-    def edge_count(self) -> int:
-        return int((self.W > 0).sum().item())
-
-    def record_fire(self, fired: torch.Tensor):
-        """발화 기록 저장 (usage pruning용)"""
-        self._step += 1
-        self.fire_history.append(fired.clone())
-        if len(self.fire_history) > 200:
-            self.fire_history.pop(0)
-
-    def recent_fire_rate(self, node_id: int, window: int) -> float:
-        """최근 window 스텝 내 발화 비율"""
-        if not self.fire_history:
-            return 0.0
-        recent = self.fire_history[-window:]
-        fires  = sum(float(f[node_id]) for f in recent if node_id < len(f))
-        return fires / len(recent)
 
 
 # ======================================================
@@ -126,16 +167,18 @@ class HubFormationEngine:
     매 스텝:
       1. 입력 신호 전파  ->  발화 노드 결정
       2. 함께 발화한 쌍의 연결 강화 (Hebbian)
-      3. 연결 강도 합 > hub_threshold 이면 허브 승격
+      3. PageRank 점수 > hub_pr_threshold 이면 허브 승격
     """
 
-    def __init__(self, wm: WeightMatrix, cfg: HTPConfig):
+    def __init__(self, wm: WeightMatrix, cfg: HubConfig):
+        # Design Ref: htp-review-improvements §3 Step 2 — Constructor DI 전환
+        # n_nodes / device 는 wm 에서 파생 (shared field 는 sub-config 에 복제하지 않음)
         self.wm  = wm
-        self.cfg = cfg
-        self.dev = cfg.device
+        self.cfg = cfg                        # HubConfig (was HTPConfig)
+        self.dev = wm.dev                     # was cfg.device
 
-        self.is_hub    = torch.zeros(cfg.n_nodes, dtype=torch.bool, device=self.dev)
-        self.fire_count= torch.zeros(cfg.n_nodes, device=self.dev)
+        self.is_hub    = torch.zeros(wm.n, dtype=torch.bool, device=self.dev)   # was cfg.n_nodes
+        self.fire_count= torch.zeros(wm.n, device=self.dev)                     # was cfg.n_nodes
         self.step_count= 0
 
         # 허브 승격/강등 이벤트 로그
@@ -842,9 +885,10 @@ class HTPRuntime:
         self.cfg.n_nodes = N
 
         self.wm  = WeightMatrix(N, self.cfg.device)
-        self.hfe = HubFormationEngine(self.wm, self.cfg)
-        self.pe  = PruningEngine(self.wm, self.hfe, self.cfg)
-        self.ae  = ActivationEngine(self.wm, self.hfe, self.cfg)
+        # Design Ref: htp-review-improvements §3 Step 2 — HFE 가 HubConfig 만 받음
+        self.hfe = HubFormationEngine(self.wm, self.cfg.hub)
+        self.pe  = PruningEngine(self.wm, self.hfe, self.cfg)     # Step 5에서 PruneConfig로 전환 예정
+        self.ae  = ActivationEngine(self.wm, self.hfe, self.cfg)  # Step 6에서 ActivationConfig로 전환 예정
         self.ae.register(self._nodes)
 
         self._built = True
@@ -868,7 +912,6 @@ def demo():
     print(SEP)
 
     rt = HTPRuntime(HTPConfig(
-        hub_threshold   = 1.5,
         hebbian_lr      = 0.13,
         decay_rate      = 0.005,
         prune_threshold = 0.02,

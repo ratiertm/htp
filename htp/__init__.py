@@ -36,6 +36,14 @@ from .thalamus import (
     TopDownBias,
 )
 
+# ── Phase 5: Memory System ─────────────────────────
+from .memory import (
+    MemorySystem,
+    Episode,
+    Pattern,
+    MemoryContext,
+)
+
 
 # ── Phase 4: LLM-as-Node + Async ────────────────────
 from .llm import LLMNode, MockLLMNode, CostRouter, LLMRegionRuntime
@@ -77,4 +85,9 @@ __all__ = [
     "CostRouter",
     "LLMRegionRuntime",
     "AsyncBrainRuntime",
+    # Phase 5
+    "MemorySystem",
+    "Episode",
+    "Pattern",
+    "MemoryContext",
 ]

@@ -1,0 +1,116 @@
+{
+  "version": "3.0",
+  "lastUpdated": "2026-05-16T11:50:25.405Z",
+  "activeFeatures": [
+    "htp-phase2-integration",
+    "htp-review-improvements"
+  ],
+  "primaryFeature": "htp-review-improvements",
+  "features": {
+    "htp-phase2-integration": {
+      "phase": "do",
+      "matchRate": null,
+      "note": "선행 사이클 — Review Feedback 통합 완료, 회귀 57/57. Check 단계로 마무리 필요 (별도 작업)",
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-05-16T11:50:25.404Z",
+        "lastUpdated": "2026-05-16T11:50:25.404Z"
+      },
+      "stateMachine": {
+        "currentState": "do",
+        "previousState": null,
+        "stateHistory": [],
+        "retryCount": 0,
+        "maxRetries": 5,
+        "circuitBreakerOpen": false
+      },
+      "metrics": {
+        "qualityScore": null,
+        "conventionCompliance": null,
+        "apiCompliance": null,
+        "cycleTimeMs": null,
+        "iterationEfficiency": null
+      },
+      "phaseTimestamps": {},
+      "automationLevel": 2
+    },
+    "htp-review-improvements": {
+      "phase": "do",
+      "matchRate": null,
+      "startedAt": "2026-05-16T00:00:00Z",
+      "scope": "Phase A: HIGH 1+2 (HTPConfig DI + htp_runtime.py 분할)",
+      "backlog": [
+        "MED-3: dashboard BrainRuntime/Memory 반영",
+        "MED-4: LLMNode/CostRouter 사용 흐름 강화",
+        "LOW-5: Friston B3 precision 증폭 시뮬레이션",
+        "LOW-6: NGE split 파라미터 장기 시뮬레이션",
+        "LOW-7: Memory CUSUM × SWR threshold 경계 분석",
+        "LOW-8: compress_dim=64 JL Lemma 재검토"
+      ],
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-05-16T00:00:00Z",
+        "lastUpdated": "2026-05-16T11:50:25.404Z"
+      },
+      "stateMachine": {
+        "currentState": "plan",
+        "previousState": null,
+        "stateHistory": [],
+        "retryCount": 0,
+        "maxRetries": 5,
+        "circuitBreakerOpen": false
+      },
+      "metrics": {
+        "qualityScore": null,
+        "conventionCompliance": null,
+        "apiCompliance": null,
+        "cycleTimeMs": null,
+        "iterationEfficiency": null
+      },
+      "phaseTimestamps": {},
+      "automationLevel": 2,
+      "selectedArchitecture": "Option A — Bottom-up Incremental (7 steps)",
+      "stepProgress": {
+        "step-1": "completed",
+        "step-2": "completed",
+        "step-3": "completed",
+        "step-4": "pending",
+        "step-5": "pending",
+        "step-6": "pending",
+        "step-7": "pending"
+      },
+      "lastRegressionPass": "57/57",
+      "session1Complete": true
+    }
+  },
+  "pipeline": {
+    "currentPhase": 1,
+    "level": "Dynamic",
+    "phaseHistory": []
+  },
+  "session": {
+    "startedAt": "2026-05-16T11:50:25.405Z",
+    "onboardingCompleted": false,
+    "lastActivity": "2026-05-16T11:50:25.405Z"
+  },
+  "history": [],
+  "stateMachine": {
+    "defaultWorkflow": "default",
+    "activeWorkflows": {},
+    "totalTransitions": 0
+  },
+  "automation": {
+    "globalLevel": 2,
+    "trustScore": 40,
+    "pendingApprovals": 0,
+    "lastGateResult": null
+  },
+  "team": {
+    "enabled": true,
+    "stateFile": ".bkit/runtime/agent-state.json",
+    "eventsFile": ".bkit/runtime/agent-events.jsonl"
+  },
+  "phase": "do"
+}

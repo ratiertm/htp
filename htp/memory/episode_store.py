@@ -151,6 +151,14 @@ class EpisodeStore:
         ).fetchall()
         return [self._row_to_episode(r) for r in rows]
 
+    def get_swr_tagged(self, limit: int = 200) -> list[Episode]:
+        """SWR 태깅된 에피소드들을 유사도 검색 없이 직접 조회."""
+        rows = self._conn.execute(
+            "SELECT * FROM episodes WHERE swr_tagged=1 ORDER BY timestamp DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [self._row_to_episode(r) for r in rows]
+
     def count(self) -> int:
         return int(self._conn.execute("SELECT COUNT(*) FROM episodes").fetchone()[0])
 

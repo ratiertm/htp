@@ -556,7 +556,6 @@ def demo():
 
     rt = HTPRuntime(
         config = HTPConfig(
-            hub_threshold   = 1.5,
             hebbian_lr      = 0.13,
             decay_rate      = 0.003,
             prune_threshold = 0.02,
