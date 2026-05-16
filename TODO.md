@@ -1,8 +1,8 @@
 # HTP — TODO / Handoff
 
-**Last updated**: 2026-05-17
-**Last commit**: `6291cbe` (origin/master push 완료)
-**Current PDCA**: `htp-thalamus-car` sub-1 완료 → sub-2 진입 대기
+**Last updated**: 2026-05-17 (Critical Gap #3 RESOLVED 반영)
+**Last commit**: `0bb6aa3` Critical Gap #3 RESOLVED — encoder state 영속화 (옵션 A-2)
+**Current PDCA**: `htp-thalamus-car` sub-1 완료 + Gap 해결 → **sub-2 진입 준비 완료**
 
 다음 세션에서 이 파일부터 읽고 시작.
 
@@ -34,35 +34,28 @@
 
 ---
 
-## ⚠️ sub-2 진입 전 결정 필요: Critical Gap #3
+## ✅ Critical Gap #3 RESOLVED (옵션 A-2 적용 완료, commit `0bb6aa3`)
 
-**현상**: `encoder.fit()` 재실행 시 `GaussianRandomProjection` 이 새 random matrix 로 refit → 누적 cache vec 의 의미 공간이 흔들림.
+**원래 현상**: `encoder.fit()` 재실행 시 `GaussianRandomProjection` 새 random matrix → 누적 cache vec 의미 공간 흔들림.
 
-**증거**: 한국어 cross-language 실험에서 brain↔infra 0.61 > brain↔ai 0.53 으로 역전 발생 (영문 단독 실험에선 정반대).
+**추가 발견**: 인메모리 `_fitted` 플래그만으로는 부족. CLI 다중 호출 시 매번 새 KnowledgeLoop 인스턴스 → encoder._fitted=False 리셋 → 매번 fit 재실행.
 
-**3가지 해결 옵션**:
+**최종 해결**: **pickle 기반 영속화 (옵션 A-2)**
+- `TfidfJLEncoder.save(path) / load(path)` — vocabulary + JL matrix + _fitted state
+- `KnowledgeLoop` 생성자: `.htp/encoder_state.pkl` 자동 load
+- 첫 ingest fit 직후 자동 save
+- 다음 프로세스가 동일 state 복원 → 동일 임베딩 공간 영구 보장
 
-| 옵션 | 변경 | 장점 | 단점 |
-|------|------|------|------|
-| **A** | `encoder.fit()` 1회 호출 후 freeze. ingest 시 corpus 갱신 안 함 | 결정적, 안정적 | 새 어휘 미반영 |
-| **B** | 매 ingest 마다 *cache 전체* re-encode | 현재 시도 중 | random_state 효과 미흡, 결과 여전히 흔들림 |
-| **C** | sub-5 (Stage 6 EmbeddingBridge) 앞당김 | 본질 해결 | 일정 변경, sLLM 의존성 추가 |
+**검증 결과**:
+- 7-entry cross-process 재-encode: **7/7 diff = 0.00e+00** (완벽 동일)
+- 영문 Go/No-Go (별도 디렉토리): brain↔ai 0.69 > brain↔infra cutoff ✅
+- 전체 회귀: **118/118 PASS** (1.30s)
+- 신규 unit test 3종 회귀 보호:
+  - test_encoder_save_load_round_trip
+  - test_loop_persists_encoder_across_instances (Gap #3 회귀 보호)
+  - test_loop_encoder_state_file_created
 
-**권장**: sub-2 진입 전 옵션 A 적용 (10분 작업). 이후 sub-5 에서 옵션 C 로 정식 해결.
-
-```python
-# 옵션 A 패치 예시 (htp/knowledge/loop.py)
-def ingest(self, text: str, source: str = "") -> IngestResult:
-    # AS-IS: 매번 fit
-    # corpus = [e.text for e in self._cache] + [text]
-    # self.encoder.fit(corpus)
-
-    # TO-BE: 최초 1회만 fit
-    if not self.encoder._fitted:
-        corpus = [e.text for e in self._cache] + [text]
-        self.encoder.fit(corpus)
-    # ... rest unchanged
-```
+**남은 trade-off**: 첫 fit 이후 새 어휘 영영 미반영. 첫 텍스트가 representative vocab 포함해야 함. **본질 해결은 sub-5 (Stage 6 EmbeddingBridge) — 사전학습 모델은 fit 불필요.**
 
 ---
 
@@ -71,7 +64,8 @@ def ingest(self, text: str, source: str = "") -> IngestResult:
 ```
 htp-thalamus-car (9 Stage, 6 sub-cycles)
 ├─ sub-1 ✅ [Plan ✅ Design ✅ Do ✅ Check ✅ 98%]   Stage 0 + 0.5
-├─ sub-2 ⏳ pending                                  Stage 1 + 2
+│  └─ Critical Gap #3 RESOLVED (commit 0bb6aa3, 옵션 A-2)
+├─ sub-2 ⏳ pending                                  Stage 1 + 2 ← 진입 준비 완료
 ├─ sub-3 ⏳ pending                                  Stage 3 (CoherenceGate)
 ├─ sub-4 ⏳ pending                                  Stage 4 + 5 (LLMRegion + Pipeline)
 ├─ sub-5 ⏳ pending (experiment/embedding-bridge)    Stage 6
@@ -108,10 +102,13 @@ htp-thalamus-car (9 Stage, 6 sub-cycles)
 다음 파일들은 `.htp/` 에 있고 `.gitignore` 됨 (의도적). **삭제 금지**:
 
 ```
-.htp/knowledge_log.jsonl     7 entries (영문 3 + 한국어 3 + bilingual 1)
-.htp/knowledge_viz.png       PCA 2D scatter + heatmap (현 상태 baseline)
-.htp/knowledge_graph.html    graphify 인터랙티브 그래프
-.htp/knowledge_graph.json    graphify 표준 포맷
+.htp/knowledge_log.jsonl                 7 entries (옵션 A-2 재생성, 동일 임베딩 공간)
+.htp/encoder_state.pkl                   pickle 영속화 (vocab + JL matrix, 1487 bytes)
+.htp/knowledge_log.pre-optionA.jsonl     백업: 패치 전 (음수 mix 불일치)
+.htp/knowledge_log.optionA-inmemory.jsonl 백업: 인메모리 옵션 A 만
+.htp/knowledge_viz.png                   PCA 2D scatter + heatmap
+.htp/knowledge_graph.html                graphify 인터랙티브 그래프
+.htp/knowledge_graph.json                graphify 표준 포맷
 ```
 
 **용도**: sub-5 (Stage 6 EmbeddingBridge) 완료 후 동일 7 entry 로 A/B 비교 — TF-IDF MVP vs sLLM 임베딩의 cross-language 매칭 품질 정량 측정.
@@ -134,15 +131,15 @@ python -m htp.knowledge discover --threshold 0.05
 
 ---
 
-## 🧪 테스트 baseline (sub-1 종료 시점)
+## 🧪 테스트 baseline (Critical Gap #3 RESOLVED 후)
 
 ```bash
 source .venv/bin/activate
 pytest tests/regression/ tests/unit/ tests/knowledge/ -q
-# 기대: 115 passed
-# - regression: 57 (이전 사이클 + 그 이전)
-# - unit: 49 (test_config_isolation 15 + test_engine_di 16 + test_import_paths 10 + test_no_circular_deps 8)
-# - knowledge: 5 (test_loop)
+# 기대: 118 passed (1.30s)
+# - regression: 57
+# - unit: 53 (config_isolation 15 + engine_di 16 + import_paths 10 + no_circular_deps 12)
+# - knowledge: 8 (test_loop — 5 기존 + 3 신규 Gap #3 회귀 보호)
 ```
 
 ⚠️ sub-2 모든 step 직후 이 명령 통과해야 함. 깨지면 즉시 롤백.
@@ -168,10 +165,13 @@ pytest tests/regression/ tests/unit/ tests/knowledge/ -q
 ## 🎯 다음 세션 시작 시 권장 순서
 
 1. **이 TODO.md 먼저 읽기**
-2. `git log --oneline -3` 으로 커밋 확인
-3. `pytest tests/regression/ tests/unit/ tests/knowledge/ -q` 로 baseline 확인 (115/115)
-4. **결정**: Critical Gap #3 옵션 A (10분 패치) 먼저 적용할지, 아니면 sub-2 진입하며 같이 처리할지
-5. `/pdca design htp-thalamus-car` 또는 직접 `/pdca do htp-thalamus-car --scope stage-1`
+2. `git log --oneline -3` 으로 커밋 확인 (최신: `0bb6aa3` Critical Gap #3 RESOLVED)
+3. `pytest tests/regression/ tests/unit/ tests/knowledge/ -q` 로 baseline 확인 (118/118)
+4. `/pdca design htp-thalamus-car` (sub-2 Design 진입)
+   - Stage 1: Vector Routing (RegionSignature + _gate_vector)
+   - Stage 2: Hybrid (_gate_hybrid + α=0.1~0.9 연속성)
+   - 누적 테스트 목표: 118 → 131 (Stage 1 +10, Stage 2 +3)
+   - `.htp/knowledge_log.jsonl` 의 7 entry 를 vector routing 테스트 데이터로 재활용
 
 ---
 

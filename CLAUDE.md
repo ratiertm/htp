@@ -60,10 +60,18 @@ htp/
 │   ├── episode_store.py                 L2 SQLite + SWR novelty × reward
 │   ├── pattern_store.py                 L3 Online Hebbian EMA + Go-CLS + CA3
 │   └── memory_system.py                 CA3-CA1 + CUSUM 트리거
-└── llm/
-    ├── llm_node.py                      LLMNode / MockLLMNode
-    ├── llm_region_runtime.py            LLM 전용 RegionRuntime
-    └── cost_router.py                   API 비용 기반 라우팅
+├── llm/
+│   ├── llm_node.py                      LLMNode / MockLLMNode
+│   ├── llm_region_runtime.py            LLM 전용 RegionRuntime
+│   └── cost_router.py                   API 비용 기반 라우팅
+└── knowledge/                          [htp-thalamus-car sub-1: Stage 0.5 MVP]
+    ├── __init__.py                     공개 export (TextEncoder, KnowledgeLoop, ...)
+    ├── encoder.py                      TextEncoder Protocol + TfidfJLEncoder
+    │                                   + save/load pickle 영속화 (Critical Gap #3)
+    ├── loop.py                         KnowledgeLoop (ingest/query/discover) + 5 dataclass
+    │                                   + 생성자 자동 load / fit 후 자동 save
+    ├── persistence.py                  KnowledgeStore (JSONL append-only)
+    └── __main__.py                     CLI (ingest/query/discover --threshold)
 
 archive/deprecated_phase1/               [Stage 2-A1 정리]
 ├── hub_formation_engine.py              구 BCM-like
@@ -85,12 +93,17 @@ tests/regression/                        [Stage 1 신규, 57개]
 ├── test_stage5_memory.py                L2/L3/MemorySystem 단위
 └── test_stage5_integration.py           BrainRuntime+Memory end-to-end
 
-tests/unit/                              [Review Improvements 신규, 46개]
+tests/unit/                              [Review Improvements + sub-1 신규, 53개]
 ├── test_engine_di.py                    Constructor DI 영구 검증 (HFE/PE/AE sub-config)
-├── test_config_isolation.py             HTPConfig facade backward-compat 영구 보호
+├── test_config_isolation.py             HTPConfig facade backward-compat 영구 보호 + 7 sub-config
 ├── test_import_paths.py                 4 import 경로 동일 객체 검증
-└── test_no_circular_deps.py             DAG 강제 (htp/core ↔ htp/runtime 단방향)
+└── test_no_circular_deps.py             DAG 강제 (htp/core ↔ htp/runtime + knowledge 단방향)
+
+tests/knowledge/                         [htp-thalamus-car sub-1 신규, 8개]
+└── test_loop.py                         ingest/query/discover + encoder 영속화 (Gap #3)
 ```
+
+**현재 테스트 baseline: 118 = regression 57 + unit 53 + knowledge 8** (1.30s)
 
 ### DAG 의존 방향 (Review Improvements 강제)
 
