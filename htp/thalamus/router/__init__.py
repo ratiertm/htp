@@ -14,11 +14,13 @@ Stage 6 (sub-5): EmbeddingBridgeRouter (실험 브랜치, 동일 Protocol)
 """
 from __future__ import annotations
 
-from .base       import RouterStrategy, RoutingScore
-from .tag_router import TagRouter
+from .base          import RouterStrategy, RoutingScore
+from .tag_router    import TagRouter
+from .vector_router import VectorRouter
 
 __all__ = [
     "RouterStrategy",
     "RoutingScore",
     "TagRouter",
+    "VectorRouter",
 ]

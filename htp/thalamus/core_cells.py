@@ -37,10 +37,14 @@ Core Cells  —  시상 내용 게이팅 (Adaptive)
 from __future__ import annotations
 
 import math
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 
 from .region_signal import RegionSignal, GatingMask
 from .top_down      import TopDownSignal
+from .router        import RouterStrategy, TagRouter
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 class CoreCells:
@@ -48,8 +52,13 @@ class CoreCells:
     Sigmoidal Gate + Top-down Bias + Hebbian Adaptive Learning.
 
     인터페이스:
-      gate(signals, top_down=None) → GatingMask
+      gate(signals, top_down=None, signal_text=None, signal_vec=None) → GatingMask
       update(winner_id, all_ids)   → None  (Hebbian 학습)
+
+    [sub-2 M6] router DI:
+      - router 기본값 = TagRouter() — 회귀 보호 (기존 raw score 와 동등)
+      - VectorRouter / HybridRouter 주입 시 content-addressable / hybrid 모드
+      - 런타임 router 교체 가능 (self.router = ...)
     """
 
     def __init__(self,
@@ -59,7 +68,8 @@ class CoreCells:
                  eta_heb:     float | None = None,  # None 이면 eta 사용
                  eta_hom:     float = 0.02,   # [A3] Homeostatic 학습률
                  target_rate: float = 0.1,    # [A3] 목표 발화율
-                 td_weight:   float = 0.3):
+                 td_weight:   float = 0.3,
+                 router:      "RouterStrategy | None" = None):
         """
         beta        : Sigmoid 날카로움
         theta       : 기본 게이팅 임계값
@@ -67,6 +77,7 @@ class CoreCells:
         eta_hom     : Homeostatic 학습률 (과흥분 theta ↑)
         target_rate : 목표 발화율 (r_i > target → 억제, r_i < target → 강화)
         td_weight   : top-down 바이어스 가중치
+        router      : [sub-2 M6] 라우팅 정책. None → TagRouter() (회귀 보호)
         """
         self.beta        = beta
         self.theta       = theta
@@ -74,6 +85,9 @@ class CoreCells:
         self._eta_hom    = eta_hom
         self._target_rate = target_rate
         self._td_weight  = td_weight
+
+        # [sub-2 M6] Router DI — 기본값은 회귀 동등 (TagRouter)
+        self.router: RouterStrategy = router or TagRouter()
 
         # Hebbian 적응 상태
         self._win_history : dict[str, float] = {}
@@ -83,28 +97,30 @@ class CoreCells:
 
     def gate(self,
              signals:   List[RegionSignal],
-             top_down:  Optional[TopDownSignal] = None) -> GatingMask:
+             top_down:  Optional[TopDownSignal] = None,
+             *,
+             signal_text: "str | None" = None,
+             signal_vec:  "np.ndarray | None" = None) -> GatingMask:
         """
         signals + top-down → GatingMask.
 
-        1. raw score = hub_strength × (1 + fire_rate)
-        2. L1 정규화
-        3. top-down 바이어스 가산 (있을 때만)
-        4. Adaptive θ 반영
-        5. Sigmoid sharpening
+        1. router.score(signal_text, signal_vec, signals) → normalized scores
+        2. top-down 바이어스 가산 (있을 때만)
+        3. Adaptive θ 반영
+        4. Sigmoid sharpening
+
+        [sub-2 M6] 1단계가 self.router (기본 TagRouter) 로 위임.
+        signal_text / signal_vec 은 keyword-only — 기존 호출자 (positional)
+        는 None 으로 들어가 TagRouter 가 무시 → 회귀 동등.
         """
         if not signals:
             return GatingMask(scores={})
 
-        # 1. Raw score
-        raw: dict[str, float] = {
-            sig.region_id: sig.hub_strength * (1.0 + sig.fire_rate)
-            for sig in signals
+        # 1. [sub-2 M6] Router 위임 — Tag/Vector/Hybrid 다형성
+        routing_scores = self.router.score(signal_text, signal_vec, signals)
+        normalized: dict[str, float] = {
+            rs.region_id: rs.score for rs in routing_scores
         }
-
-        # 2. L1 정규화
-        total = sum(raw.values()) or 1.0
-        normalized = {rid: v / total for rid, v in raw.items()}
 
         # 3. Top-down 바이어스 (Biased Competition)
         td_biases: dict[str, float] = {}

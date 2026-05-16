@@ -20,7 +20,10 @@ import torch
 
 from htp.thalamus.signature        import RegionSignature
 from htp.thalamus.region_signal    import RegionSignal
-from htp.thalamus.router           import RouterStrategy, RoutingScore, TagRouter
+from htp.thalamus.router           import (
+    RouterStrategy, RoutingScore, TagRouter, VectorRouter,
+)
+from htp.thalamus.core_cells       import CoreCells
 
 
 # ══════════════════════════════════════════════════════════
@@ -171,3 +174,208 @@ def test_region_signal_signature_field_default_none():
     sig2 = _make_signal("r2", 0.5, 0.3, signature=rsig)
     assert sig2.region_signature is rsig
     assert sig2.region_signature.count == 1
+
+
+# ══════════════════════════════════════════════════════════
+# M4 — VectorRouter  (+5: empty_vec, threshold, cold_start, clamp, β sweep)
+# ══════════════════════════════════════════════════════════
+
+def _make_signal_with_centroid(rid: str, centroid: np.ndarray) -> RegionSignal:
+    """centroid 가 있는 RegionSignal — VectorRouter 테스트용 fixture."""
+    sig = RegionSignature(dim=centroid.shape[0])
+    sig.update(centroid)
+    return RegionSignal(
+        region_id    = rid,
+        hub_strength = 0.5,
+        fire_rate    = 0.3,
+        top_hubs     = [],
+        overload     = False,
+        output_vec   = torch.zeros(8),
+        region_signature = sig,
+    )
+
+
+def test_vector_router_empty_vec():
+    """signal_vec=None 시 모든 score 0 + last_metrics.empty_vec=True 기록."""
+    router = VectorRouter()
+    regions = [
+        _make_signal_with_centroid("r1", np.array([1.0, 0.0, 0.0, 0.0])),
+        _make_signal_with_centroid("r2", np.array([0.0, 1.0, 0.0, 0.0])),
+    ]
+    scores = router.score(None, None, regions)
+    assert all(rs.score == 0.0 for rs in scores)
+    assert router.last_metrics["empty_vec"] is True
+    assert router.last_metrics["active_count"] == 0
+
+
+def test_vector_router_cold_start_uniform():
+    """모든 Region count=0 시 균등 score 반환 — Review #3 회귀 보호.
+
+    empty route 0건 보장 — vector mode 가 절대 죽지 않음.
+    """
+    router = VectorRouter()
+    # signature=None 으로 cold start 시뮬레이션
+    regions = [
+        RegionSignal(region_id="r1", hub_strength=0.5, fire_rate=0.3,
+                     top_hubs=[], overload=False, output_vec=torch.zeros(8)),
+        RegionSignal(region_id="r2", hub_strength=0.5, fire_rate=0.3,
+                     top_hubs=[], overload=False, output_vec=torch.zeros(8)),
+        RegionSignal(region_id="r3", hub_strength=0.5, fire_rate=0.3,
+                     top_hubs=[], overload=False, output_vec=torch.zeros(8)),
+    ]
+    query = np.array([1.0, 0.0, 0.0, 0.0])
+    scores = router.score(None, query, regions)
+    # 균등 분포 — 모두 1/3
+    assert all(rs.score == pytest.approx(1.0 / 3.0) for rs in scores)
+    # 모든 RoutingScore.breakdown 에 cold_start 마커
+    assert all(rs.breakdown.get("cold_start") is True for rs in scores)
+    # last_metrics 에도 기록
+    assert router.last_metrics["cold_start"] is True
+    assert router.last_metrics["active_count"] == 3
+
+
+def test_vector_router_dynamic_threshold():
+    """thr = μ + β×σ 정규화 — β=0.5 기본 동작 + similarity 차이 반영."""
+    # 4-dim 공간에서 서로 다른 centroid
+    regions = [
+        _make_signal_with_centroid("close",  np.array([1.0, 0.0, 0.0, 0.0])),
+        _make_signal_with_centroid("medium", np.array([0.7, 0.7, 0.0, 0.0])),
+        _make_signal_with_centroid("far",    np.array([0.0, 0.0, 1.0, 0.0])),
+    ]
+    query = np.array([1.0, 0.0, 0.0, 0.0])
+    router = VectorRouter(beta=0.5)
+    scores = router.score(None, query, regions)
+
+    by_rid = {rs.region_id: rs for rs in scores}
+    # close 가 최고 점수 (similarity=1.0)
+    assert by_rid["close"].score >= by_rid["medium"].score
+    # far 는 thr 미만 → 0
+    assert by_rid["far"].score == pytest.approx(0.0, abs=1e-6)
+    # last_metrics 기록 검증
+    m = router.last_metrics
+    assert m["mu"] > 0 and m["sigma"] > 0
+    assert m["thr"] == pytest.approx(m["mu"] + 0.5 * m["sigma"])
+
+
+def test_vector_router_high_uniform_similarity():
+    """모든 Region 의 similarity ≥ 0.95 시 thr 클램프 동작 — Review #1.
+
+    부호 반전 없이 안전. thr ≤ 0.99 보장.
+    """
+    # 4-dim 공간 — 모든 centroid 가 query 와 매우 유사 (정규화 후 거의 동일)
+    regions = [
+        _make_signal_with_centroid("r1", np.array([1.0,    0.05, 0.0, 0.0])),
+        _make_signal_with_centroid("r2", np.array([1.0,    0.10, 0.0, 0.0])),
+        _make_signal_with_centroid("r3", np.array([0.99,   0.0,  0.0, 0.0])),
+    ]
+    query = np.array([1.0, 0.0, 0.0, 0.0])
+    router = VectorRouter(beta=10.0)  # 큰 β → μ+β×σ 가 1.0 초과할 위험
+    scores = router.score(None, query, regions)
+
+    # thr 클램프로 0.99 이하 보장
+    assert router.last_metrics["thr"] <= 0.99 + 1e-10
+    # 모든 score 는 [0, 1] 범위 (부호 반전 없음)
+    for rs in scores:
+        assert 0.0 <= rs.score <= 1.0 + 1e-8
+
+
+def test_vector_router_beta_sweep_metrics():
+    """β∈{0.0, 0.5, 1.0} sweep 시 메트릭 단조성 — Review #6 핵심.
+
+    예상 동작:
+      β↑ → thr↑ → active_count↓ → entropy↓ → top1_score↑
+    (precision/recall trade-off 의 정량 관찰)
+    """
+    # 4-dim 공간, 서로 다른 similarity 분포
+    regions = [
+        _make_signal_with_centroid("r1", np.array([1.0, 0.0, 0.0, 0.0])),
+        _make_signal_with_centroid("r2", np.array([0.8, 0.6, 0.0, 0.0])),
+        _make_signal_with_centroid("r3", np.array([0.5, 0.5, 0.7, 0.0])),
+        _make_signal_with_centroid("r4", np.array([0.0, 0.0, 0.0, 1.0])),
+    ]
+    query = np.array([1.0, 0.0, 0.0, 0.0])
+
+    metrics_by_beta: dict[float, dict] = {}
+    for beta in (0.0, 0.5, 1.0):
+        router = VectorRouter(beta=beta)
+        router.score(None, query, regions)
+        m = dict(router.last_metrics)
+        metrics_by_beta[beta] = m
+
+    # last_metrics 가 모든 필수 키 노출 (회귀 보호)
+    required = {"beta", "mu", "sigma", "thr", "active_count",
+                "entropy", "top1_score"}
+    for beta, m in metrics_by_beta.items():
+        missing = required - set(m.keys())
+        assert not missing, f"β={beta} 누락 메트릭: {missing}"
+
+    # 단조성: β↑ → thr↑ (μ+β×σ 단조 증가)
+    assert (metrics_by_beta[0.0]["thr"]
+            <= metrics_by_beta[0.5]["thr"]
+            <= metrics_by_beta[1.0]["thr"])
+
+    # 단조성: β↑ → active_count 감소 또는 동일
+    assert (metrics_by_beta[0.0]["active_count"]
+            >= metrics_by_beta[0.5]["active_count"]
+            >= metrics_by_beta[1.0]["active_count"])
+
+    # 단조성: β↑ → entropy 감소 또는 동일 (집중도↑)
+    assert (metrics_by_beta[0.0]["entropy"]
+            >= metrics_by_beta[1.0]["entropy"] - 1e-10)
+
+
+# ══════════════════════════════════════════════════════════
+# M6 — CoreCells router DI  (+3)
+# ══════════════════════════════════════════════════════════
+
+def test_core_cells_router_di_default_tag():
+    """CoreCells() 기본 router 가 TagRouter — 회귀 보호 핵심."""
+    cc = CoreCells()
+    assert isinstance(cc.router, TagRouter)
+    assert cc.router.mode == "tag"
+
+
+def test_core_cells_router_swap_at_runtime():
+    """런타임 router 교체 후 다음 gate() 가 새 router 사용 — DI 핵심 가치.
+
+    Review #4: M6 의 자기방어적 가치 — VectorRouter 주입 시 다음 gate 호출이
+    실제로 vector mode 로 동작함을 보장.
+    """
+    cc = CoreCells()
+    signals = [
+        _make_signal("brain", hub=0.6, fire=0.5),
+        _make_signal("ai",    hub=0.3, fire=0.2),
+    ]
+
+    # 기본 (TagRouter) 결과
+    mask_tag = cc.gate(signals)
+
+    # router 교체
+    cc.router = VectorRouter(beta=0.0)
+    assert isinstance(cc.router, VectorRouter)
+
+    # 같은 signals + 새 router 로 gate — 다른 동작 (cold start 균등)
+    mask_vec = cc.gate(signals, signal_vec=np.array([1.0, 0.0, 0.0, 0.0]
+                                                    + [0.0] * 60))
+    # 두 결과 다름 — 단순히 router 가 바뀌어 새 logic 적용됨을 확인
+    # cold start 균등 score 진입 (signature=None) → VectorRouter.last_metrics 기록
+    assert cc.router.last_metrics["cold_start"] is True
+
+
+def test_core_cells_vector_mode_with_signature():
+    """signature 가 있는 Region 들에 대해 vector mode 가 정상 라우팅."""
+    cc = CoreCells(router=VectorRouter(beta=0.0))
+    # 4-dim 공간 fixture
+    regions = [
+        _make_signal_with_centroid("brain", np.array([1.0, 0.0, 0.0, 0.0])),
+        _make_signal_with_centroid("ai",    np.array([0.9, 0.1, 0.0, 0.0])),
+        _make_signal_with_centroid("infra", np.array([0.0, 0.0, 1.0, 0.0])),
+    ]
+    query = np.array([1.0, 0.0, 0.0, 0.0])
+
+    mask = cc.gate(regions, signal_vec=query)
+    # 모든 Region 에 대해 gating score 산출 (empty route 0건)
+    assert set(mask.scores.keys()) == {"brain", "ai", "infra"}
+    # brain (similarity=1.0) 의 gate 가 infra (similarity=0.0) 보다 크거나 같음
+    # (sigmoid + theta_bias 영향으로 동률 가능성 있음, 단조 ≥ 검증)
+    assert mask.scores["brain"] >= mask.scores["infra"]
