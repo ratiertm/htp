@@ -22,7 +22,8 @@ import pytest
 # 검사 대상 디렉토리
 _PROJECT_ROOT  = pathlib.Path(__file__).parent.parent.parent
 _CORE_DIR      = _PROJECT_ROOT / "htp" / "core"
-_KNOWLEDGE_DIR = _PROJECT_ROOT / "htp" / "knowledge"  # htp-thalamus-car sub-1
+_KNOWLEDGE_DIR = _PROJECT_ROOT / "htp" / "knowledge"      # sub-1
+_ROUTER_DIR    = _PROJECT_ROOT / "htp" / "thalamus" / "router"  # sub-2 M8
 
 
 def _from_modules(py_file: pathlib.Path) -> list[str]:
@@ -94,6 +95,37 @@ def test_knowledge_file_dag_isolation(py_file: pathlib.Path):
     assert not violations, (
         f"DAG violation in htp/knowledge/{py_file.name}: {violations}\n"
         f"htp/knowledge/* 는 htp.runtime/thalamus/memory 를 import 할 수 없음"
+    )
+
+
+# ══════════════════════════════════════════════════════════
+# DAG 규칙 (htp-thalamus-car sub-2 M8):
+# htp/thalamus/router/*.py 는 htp.runtime / htp.memory / htp.knowledge 미참조
+# 허용: htp/thalamus 형제 (signature, region_signal) + numpy + typing
+# Design Ref: htp-thalamus-car_sub-2_design v1.md §3
+# ══════════════════════════════════════════════════════════
+
+@pytest.mark.parametrize("py_file", [
+    p for p in _ROUTER_DIR.glob("*.py")
+    if p.name != "__init__.py"
+] if _ROUTER_DIR.exists() else [])
+def test_router_file_dag_isolation(py_file: pathlib.Path):
+    """htp/thalamus/router/<file>.py 의 DAG 단방향성 보장.
+
+    sub-5 (Stage 6 EmbeddingBridge) 시 동일 Protocol 추가 구현체가 끼워질
+    때도 이 규칙 유지 — runtime / memory / knowledge 로의 역방향 금지.
+    """
+    from_mods = _from_modules(py_file)
+    direct    = _direct_imports(py_file)
+
+    forbidden = ("htp.runtime", "htp.memory", "htp.knowledge")
+    violations = [
+        m for m in from_mods + direct
+        if m and any(f in m for f in forbidden)
+    ]
+    assert not violations, (
+        f"DAG violation in htp/thalamus/router/{py_file.name}: {violations}\n"
+        f"htp/thalamus/router/* 는 htp.runtime/memory/knowledge 미참조 유지"
     )
 
 

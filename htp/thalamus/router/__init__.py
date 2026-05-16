@@ -17,10 +17,12 @@ from __future__ import annotations
 from .base          import RouterStrategy, RoutingScore
 from .tag_router    import TagRouter
 from .vector_router import VectorRouter
+from .hybrid_router import HybridRouter
 
 __all__ = [
     "RouterStrategy",
     "RoutingScore",
     "TagRouter",
     "VectorRouter",
+    "HybridRouter",
 ]
