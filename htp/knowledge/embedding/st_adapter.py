@@ -39,7 +39,10 @@ class STAdapter:
         for p in self._model.parameters():
             p.requires_grad = False
 
-        self._dim = int(self._model.get_sentence_embedding_dimension())
+        # sentence-transformers 5.x 호환 (get_embedding_dimension) + 5.x 미만 fallback
+        _dim_method = getattr(self._model, "get_embedding_dimension", None) \
+            or self._model.get_sentence_embedding_dimension
+        self._dim = int(_dim_method())
         self._model_name = model_name
         self._torch = torch
 
