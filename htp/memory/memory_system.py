@@ -40,6 +40,10 @@ class MemorySystem:
         self.l3 = PatternStore(self.memory_dir / "patterns.json")
         self.session_id = session_id or str(uuid.uuid4())
         self._last_episode_id: Optional[str] = None
+        # [sub-3 M5] episode_id → conflict_magnitude (Plan FR-15).
+        # SQLite schema 변경 회피 위해 in-memory dict 사용.
+        # tag_swr() 호출 시 이 dict 가 priority 증폭에 사용됨.
+        self._conflict_by_episode: dict[str, float] = {}
 
     # ── 저장 ─────────────────────────────────────
 
@@ -49,10 +53,15 @@ class MemorySystem:
              winner:      str,
              action_type: str,
              score:       float,
-             context:     str) -> str:
+             context:     str,
+             conflict_magnitude: float = 0.0) -> str:
         """
         에피소드 저장.
         novelty = 1 - L3 매칭 신뢰도 → L3 에 패턴 없을수록 1.0 에 가까움.
+
+        [sub-3 M5] conflict_magnitude (Plan FR-15):
+          기본 0.0 → 기존 동작 동등 (회귀 보호).
+          > 0 시 episode 의 swr_priority 가 (1 + conflict) 배 증폭.
         """
         novelty = 1.0 - self.l3.match_confidence(state_vec)
         ep = Episode(
@@ -67,7 +76,20 @@ class MemorySystem:
         )
         ep_id = self.l2.save(ep)
         self._last_episode_id = ep_id
+        if conflict_magnitude > 0.0:
+            self._conflict_by_episode[ep_id] = float(conflict_magnitude)
         return ep_id
+
+    def swr_priority(self, novelty: float, reward: float,
+                     conflict_magnitude: float = 0.0) -> float:
+        """Plan FR-15 — 단일 episode priority 계산.
+
+        priority = novelty × reward × (1 + conflict_magnitude)
+
+        conflict_magnitude=0 → 기존 식 (회귀 보호).
+        외부 호출자가 priority 만 계산하고자 할 때 사용 (test 검증 진입점).
+        """
+        return float(novelty) * float(reward) * (1.0 + float(conflict_magnitude))
 
     # ── CA3-CA1 recall ──────────────────────────
 
@@ -116,9 +138,14 @@ class MemorySystem:
         """
         CUSUM overload = 피질 과부하 = 수면 신호.
         SWR 태깅 → Online Hebbian consolidation 실행.
+
+        [sub-3 M5] conflict_magnitude 보존 dict 를 tag_swr 에 전달 (Plan FR-15).
         """
-        # 1. SWR 태깅 (novelty × score 가 높은 에피소드들)
-        self.l2.tag_swr(priority_threshold=self.SWR_PRIORITY_THRESHOLD)
+        # 1. SWR 태깅 (novelty × score × (1 + conflict_magnitude))
+        self.l2.tag_swr(
+            priority_threshold=self.SWR_PRIORITY_THRESHOLD,
+            conflict_map=self._conflict_by_episode or None,
+        )
 
         # 2. 태깅된 에피소드들 조회 (최신순)
         tagged = self.l2.get_swr_tagged(limit=self.CONSOLIDATE_TOP_K)

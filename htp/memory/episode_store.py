@@ -87,17 +87,24 @@ class EpisodeStore:
 
     # ── SWR 태깅 ─────────────────────────────────
 
-    def tag_swr(self, priority_threshold: float = 0.5):
+    def tag_swr(self,
+                priority_threshold: float = 0.5,
+                conflict_map: "dict[str, float] | None" = None):
         """
-        SWR 태깅 — LeCun/Yang & Buzsáki 2024:
-          priority = novelty × score  (두 조건 AND)
+        SWR 태깅 — LeCun/Yang & Buzsáki 2024 + sub-3 Plan FR-15:
+          priority = novelty × score × (1 + conflict_magnitude)
           tagged   = priority >= threshold
+
+        conflict_map: episode_id → conflict_magnitude. None 또는 미존재 시 0.
+                       기존 호출자 (conflict_map=None) 는 기존 식 동등 (회귀 보호).
         """
         rows = self._conn.execute(
             "SELECT episode_id, score, novelty FROM episodes WHERE outcome IS NOT NULL"
         ).fetchall()
         for ep_id, score, novelty in rows:
-            priority = (novelty or 0.0) * (score or 0.0)
+            conflict = (conflict_map.get(ep_id, 0.0)
+                        if conflict_map is not None else 0.0)
+            priority = (novelty or 0.0) * (score or 0.0) * (1.0 + conflict)
             tagged   = 1 if priority >= priority_threshold else 0
             self._conn.execute(
                 "UPDATE episodes SET swr_tagged=? WHERE episode_id=?",

@@ -234,7 +234,13 @@ class BrainRuntime:
     def __init__(self,
                  pfc_config: Optional[HTPConfig] = None,
                  memory_dir: str | Path = ".htp",
-                 enable_memory: bool = True):
+                 enable_memory: bool = True,
+                 coherence: "object | None" = None):
+        """
+        coherence: CoherenceStrategy 인스턴스 (None=비활성, 기본).
+          비활성 시 기존 동작 그대로 (회귀 보호 — Plan FR-14).
+          활성 시 Region 응답 수집 → bind() → conflict 를 swr_priority 증폭.
+        """
         self.regions  : dict[str, RegionRuntime] = {}
         self.thalamus                            = None
         self.pfc      : PFCRuntime               = PFCRuntime(pfc_config)
@@ -246,6 +252,10 @@ class BrainRuntime:
             MemorySystem(memory_dir=memory_dir) if enable_memory else None
         )
         self._last_state_vec: Optional[torch.Tensor] = None
+
+        # [sub-3 M4] CoherenceGate DI — None 기본 (회귀 보호)
+        self.coherence = coherence
+        self._last_bound_response = None   # 외부 inspection 용
 
     def add_region(self, name: str, region: RegionRuntime):
         """Region 추가. Thalamus는 다음 run()에서 재생성."""
@@ -294,6 +304,16 @@ class BrainRuntime:
         # 2. Thalamus (이전 스텝 top-down + memory hint 반영)
         thal_out = self.thalamus.step(data, top_down=self._last_td)
 
+        # [sub-3 M4] CoherenceGate hook (옵션, additive)
+        #   - coherence=None 시 기존 동작 (회귀 보호)
+        #   - 활성 시 Region 응답 수집 → bind() → _last_bound_response 보존
+        #     + conflict_magnitude 를 memory.save() 에 전달 (Plan FR-15)
+        self._last_bound_response = None
+        if self.coherence is not None:
+            bound = self._bind_region_responses()
+            if bound is not None:
+                self._last_bound_response = bound
+
         # 3. PFC 결정 + 새 TopDownSignal 생성
         action, td_signal = self.pfc.decide(thal_out, regions=self.regions)
 
@@ -303,16 +323,21 @@ class BrainRuntime:
         # [C3-③] state_vec 보존 — 다음 스텝 recall 용
         self._last_state_vec = thal_out.state_vec.detach().clone()
 
-        # [C3-④] 에피소드 저장
+        # [C3-④] 에피소드 저장 (sub-3 M4: conflict_magnitude 전달)
         if self.memory is not None:
             score = self._extract_score(action)
+            conflict_magnitude = (
+                self._last_bound_response.conflict
+                if self._last_bound_response is not None else 0.0
+            )
             self.memory.save(
-                state_vec   = thal_out.state_vec,
-                step        = self._step,
-                winner      = action.winner,
-                action_type = action.type,
-                score       = score,
-                context     = str(data)[:50],
+                state_vec          = thal_out.state_vec,
+                step               = self._step,
+                winner             = action.winner,
+                action_type        = action.type,
+                score              = score,
+                context            = str(data)[:50],
+                conflict_magnitude = conflict_magnitude,
             )
 
         # [C3-⑤] CUSUM overload → consolidation 트리거 (수면 메커니즘)
@@ -339,6 +364,47 @@ class BrainRuntime:
                 action.result = last.outputs.get(action.winner)
 
         return action
+
+    # ── CoherenceGate 헬퍼 (sub-3 M4) ─────────────
+
+    def _bind_region_responses(self):
+        """모든 Region 의 RegionSignal 을 RegionResponse 로 변환 후 bind.
+
+        차원 통일은 numpy padding/truncate 로 처리. 안전 fallback:
+          - Region 수 < 2 → None 반환 (binding 의미 없음)
+          - 차원 0 또는 NaN → 해당 Region skip
+        """
+        if self.coherence is None or len(self.regions) < 2:
+            return None
+        import numpy as _np
+        from ..thalamus.types import RegionResponse
+
+        responses = []
+        target_dim = None
+        for name, region in self.regions.items():
+            try:
+                signal = region.collect_signal()
+            except Exception:
+                continue
+            vec = signal.output_vec.detach().cpu().numpy().astype("float64")
+            if vec.size == 0 or not _np.isfinite(vec).all():
+                continue
+            if target_dim is None:
+                target_dim = vec.shape[0]
+            # 차원 통일 (padding 또는 truncate)
+            if vec.shape[0] < target_dim:
+                vec = _np.pad(vec, (0, target_dim - vec.shape[0]))
+            elif vec.shape[0] > target_dim:
+                vec = vec[:target_dim]
+            responses.append(RegionResponse(
+                region_id  = signal.region_id,
+                output_vec = vec,
+                precision  = float(signal.precision),
+            ))
+
+        if len(responses) < 2:
+            return None
+        return self.coherence.bind(responses)
 
     # ── Memory 헬퍼 (Stage 5-C3) ───────────────────
 

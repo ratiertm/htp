@@ -22,8 +22,9 @@ import pytest
 # 검사 대상 디렉토리
 _PROJECT_ROOT  = pathlib.Path(__file__).parent.parent.parent
 _CORE_DIR      = _PROJECT_ROOT / "htp" / "core"
-_KNOWLEDGE_DIR = _PROJECT_ROOT / "htp" / "knowledge"      # sub-1
+_KNOWLEDGE_DIR = _PROJECT_ROOT / "htp" / "knowledge"           # sub-1
 _ROUTER_DIR    = _PROJECT_ROOT / "htp" / "thalamus" / "router"  # sub-2 M8
+_COHERENCE_DIR = _PROJECT_ROOT / "htp" / "thalamus" / "coherence"  # sub-3 M6
 
 
 def _from_modules(py_file: pathlib.Path) -> list[str]:
@@ -126,6 +127,34 @@ def test_router_file_dag_isolation(py_file: pathlib.Path):
     assert not violations, (
         f"DAG violation in htp/thalamus/router/{py_file.name}: {violations}\n"
         f"htp/thalamus/router/* 는 htp.runtime/memory/knowledge 미참조 유지"
+    )
+
+
+# ══════════════════════════════════════════════════════════
+# DAG 규칙 (htp-thalamus-car sub-3 M6):
+# htp/thalamus/coherence/*.py 는 htp.runtime/memory/knowledge 미참조
+# 또한 htp.thalamus.router 도 미참조 (coherence ↔ router 독립)
+# Design Ref: htp-thalamus-car.sub-3.design.md §3
+# ══════════════════════════════════════════════════════════
+
+@pytest.mark.parametrize("py_file", [
+    p for p in _COHERENCE_DIR.glob("*.py")
+    if p.name != "__init__.py"
+] if _COHERENCE_DIR.exists() else [])
+def test_coherence_file_dag_isolation(py_file: pathlib.Path):
+    """htp/thalamus/coherence/<file>.py 의 DAG 단방향성 보장."""
+    from_mods = _from_modules(py_file)
+    direct    = _direct_imports(py_file)
+
+    forbidden = ("htp.runtime", "htp.memory",
+                 "htp.knowledge", "htp.thalamus.router")
+    violations = [
+        m for m in from_mods + direct
+        if m and any(f in m for f in forbidden)
+    ]
+    assert not violations, (
+        f"DAG violation in htp/thalamus/coherence/{py_file.name}: {violations}\n"
+        f"htp/thalamus/coherence/* 는 runtime/memory/knowledge/router 미참조 유지"
     )
 
 
