@@ -82,6 +82,47 @@ htp-thalamus-car (9 Stage, 6 sub-cycles)
 
 본 사이클 종료 후 별도 PDCA 사이클로 진행할 항목들:
 
+### ⭐ NEW: `htp-knowledge-cli-polish` (L2 sidequest, sub-3 직후 권장)
+
+**Trigger**: sub-3 (CoherenceGate) 완료 후 또는 sub-3 마지막 step 으로 흡수.
+**소요**: 1-2일.
+**효과**: L1 (가설 검증용) → **L2 (매일 쓰는 prototype)**.
+**한계**: 여전히 TF-IDF — 한국어 의미 매칭 부정확은 sub-5 (EmbeddingBridge) 가 자동 해결 → L3.
+
+**Acceptance Criteria** (5종 CLI 기능):
+
+1. **Batch ingest** — 파일/디렉토리 일괄 처리
+   ```bash
+   python -m htp.knowledge ingest --file notes.md --source diary
+   python -m htp.knowledge ingest --dir ~/Documents/Obsidian/Daily --source obs
+   ```
+2. **Stdin pipe**
+   ```bash
+   echo "오늘의 통찰..." | python -m htp.knowledge ingest --source 일기
+   cat report.txt | python -m htp.knowledge ingest --source report
+   ```
+3. **Source / time / tag filter**
+   ```bash
+   python -m htp.knowledge query "패턴 인출" --source brain --since 2026-04
+   python -m htp.knowledge discover --threshold 0.05 --since 2026-04
+   ```
+4. **Edit / delete / tag** (현재 append-only 한계 보완)
+   ```bash
+   python -m htp.knowledge delete --id 7
+   python -m htp.knowledge tags --add "memory,distributed" --id 4
+   ```
+5. **Export**
+   ```bash
+   python -m htp.knowledge export --format markdown > knowledge.md
+   python -m htp.knowledge export --format json --source brain > brain.json
+   ```
+
+**검증 시나리오**: `tests/실사용 테스트.md` 에 시드 작성 (사용자 매일 사용 use case 추가 가능).
+
+**연관 follow-up 분기**:
+- L3 (sub-5 EmbeddingBridge 완료 시 자동 도달) — 한국어 형태소 분석 + fit 불필요
+- L4 (별도 cycle `htp-knowledge-integration`) — Obsidian / LLM / shell 통합
+
 ### Phase B (MED)
 - **MED-3**: `static/index.html` 대시보드 BrainRuntime/Memory 반영
 - ~~MED-4~~: LLMNode/CostRouter 사용 흐름 (htp-thalamus-car sub-4 에 흡수됨)
