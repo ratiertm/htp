@@ -126,6 +126,91 @@ class KnowledgeLoop:
         return IngestResult(entry=entry, neighbors=neighbors,
                             conflicts=conflicts, resonances=resonances)
 
+    # ── batch ingest (L2 sidequest F1) ────────────────────
+    def ingest_batch(self, texts: list[str], source: str = ""
+                    ) -> dict:
+        """N 개 텍스트 일괄 ingest — encoder.fit() 1회만 (옵션 A-2 영속화).
+
+        Sub-decision #5: skip-and-continue 정책.
+
+        반환: {"success": [IngestResult], "errors": [{"text", "error"}]}
+        """
+        results = {"success": [], "errors": []}
+        for text in texts:
+            try:
+                r = self.ingest(text, source=source)
+                results["success"].append(r)
+            except Exception as e:
+                results["errors"].append({
+                    "text":  (text[:80] + "...") if len(text) > 80 else text,
+                    "error": str(e),
+                })
+        return results
+
+    # ── delete / edit / add_tags (L2 sidequest F4) ────────
+    def delete(self, entry_id: str) -> bool:
+        """tombstone 패턴 delete. 성공 시 True, ID 미존재 시 False."""
+        found = next((e for e in self._cache if e.id == entry_id), None)
+        if found is None:
+            return False
+        self._cache = [e for e in self._cache if e.id != entry_id]
+        self.store.append_tombstone(Tombstone(
+            kind      = "delete",
+            ref_id    = entry_id,
+            timestamp = datetime.now(timezone.utc).isoformat(),
+        ))
+        return True
+
+    def edit(self, entry_id: str, new_text: str) -> KnowledgeEntry | None:
+        """본문 수정 — id 유지 (Plan FR-13). 같은 id 로 새 entry append.
+
+        load_all 의 '후자 우선' 로직으로 최신 entry 가 반환됨.
+        text/vec/timestamp 갱신, tags/source 보존.
+        """
+        target = next((e for e in self._cache if e.id == entry_id), None)
+        if target is None:
+            return None
+
+        new_vec = self.encoder.encode(new_text)
+        new_entry = KnowledgeEntry(
+            text           = new_text,
+            vec            = new_vec,
+            source         = target.source,
+            timestamp      = datetime.now(timezone.utc).isoformat(),
+            neighbors      = [],
+            conflict_count = 0,
+            id             = entry_id,
+            tags           = list(target.tags),
+        )
+        # cache 업데이트
+        idx = self._cache.index(target)
+        self._cache[idx] = new_entry
+        # jsonl 에 추가 — 같은 id 두 라인이 되지만 load_all 의 후자 우선
+        self.store.append(new_entry)
+        return new_entry
+
+    def add_tags(self, entry_id: str, tags: list[str]
+                ) -> KnowledgeEntry | None:
+        """entry 에 tags 추가 (중복 제거 union)."""
+        target = next((e for e in self._cache if e.id == entry_id), None)
+        if target is None:
+            return None
+        merged = list({*target.tags, *tags})
+        new_entry = KnowledgeEntry(
+            text           = target.text,
+            vec            = target.vec,
+            source         = target.source,
+            timestamp      = datetime.now(timezone.utc).isoformat(),
+            neighbors      = list(target.neighbors),
+            conflict_count = target.conflict_count,
+            id             = entry_id,
+            tags           = merged,
+        )
+        idx = self._cache.index(target)
+        self._cache[idx] = new_entry
+        self.store.append(new_entry)
+        return new_entry
+
     # ── query ─────────────────────────────────────────────
     def query(self, question: str) -> QueryResult:
         if not self._cache:

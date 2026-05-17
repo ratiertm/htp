@@ -16,6 +16,7 @@ from .loop        import (
 )
 from .persistence import KnowledgeStore
 from .migrate     import migrate_add_uuid              # L2 sidequest session-1
+from .filters     import filter_entries, parse_since   # L2 sidequest session-2
 
 __all__ = [
     "TextEncoder", "TfidfJLEncoder",
@@ -23,4 +24,5 @@ __all__ = [
     "IngestResult", "QueryResult", "Discovery",
     "KnowledgeStore",
     "migrate_add_uuid",
+    "filter_entries", "parse_since",
 ]
