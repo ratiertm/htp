@@ -25,7 +25,14 @@ def main(argv: "list[str] | None" = None) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="htp.knowledge",
-        description="HTP Knowledge Loop CLI (L2 polish)",
+        description="HTP Knowledge Loop CLI (L2 polish + sub-5 embedding)",
+    )
+    # sub-5: encoder 선택 (D3 fallback)
+    parser.add_argument(
+        "--encoder",
+        choices=["tfidf", "embedding"],
+        default="tfidf",
+        help="인코더 선택 (tfidf: 빠름·조잡, embedding: 사전학습·정확)",
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 

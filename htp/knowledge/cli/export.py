@@ -3,14 +3,14 @@ from __future__ import annotations
 
 import sys
 
-from ..encoder    import TfidfJLEncoder
+from ._common    import make_loop
 from ..exporters  import export_markdown, export_json, export_obsidian
 from ..filters    import filter_entries
 from ..loop       import KnowledgeLoop
 
 
 def run(args) -> int:
-    loop = KnowledgeLoop(encoder=TfidfJLEncoder())
+    loop = make_loop(getattr(args, "encoder", "tfidf"))
 
     try:
         entries = filter_entries(

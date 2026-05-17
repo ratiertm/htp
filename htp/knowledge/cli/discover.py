@@ -1,13 +1,13 @@
 """discover subcommand — filter 지원 (L2 sidequest session-3 F3)."""
 from __future__ import annotations
 
-from ..encoder import TfidfJLEncoder
+from ._common import make_loop
 from ..filters import filter_entries
 from ..loop    import KnowledgeLoop
 
 
 def run(args) -> int:
-    loop = KnowledgeLoop(encoder=TfidfJLEncoder())
+    loop = make_loop(getattr(args, "encoder", "tfidf"))
 
     if args.threshold is not None:
         loop.discover_threshold = args.threshold
