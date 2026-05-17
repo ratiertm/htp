@@ -15,21 +15,14 @@ import numpy as np
 
 from .encoder     import TextEncoder
 from .persistence import KnowledgeStore
+from .types       import KnowledgeEntry, Tombstone   # L2 sidequest session-1
 
 
 # ══════════════════════════════════════════════════════════
 # Dataclass 정의
+# (KnowledgeEntry 는 types.py 로 이동 — session-1, sub-decision #3)
+# 이 모듈에서 backward-compat 위해 re-export.
 # ══════════════════════════════════════════════════════════
-
-@dataclass
-class KnowledgeEntry:
-    text: str
-    vec: np.ndarray
-    source: str
-    timestamp: str
-    neighbors: list = field(default_factory=list)
-    conflict_count: int = 0
-
 
 @dataclass
 class Neighbor:
@@ -197,6 +190,6 @@ class KnowledgeLoop:
 
 
 __all__ = [
-    "KnowledgeLoop", "KnowledgeEntry", "Neighbor",
+    "KnowledgeLoop", "KnowledgeEntry", "Tombstone", "Neighbor",
     "IngestResult", "QueryResult", "Discovery",
 ]
