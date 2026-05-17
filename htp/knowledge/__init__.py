@@ -17,6 +17,7 @@ from .loop        import (
 from .persistence import KnowledgeStore
 from .migrate     import migrate_add_uuid              # L2 sidequest session-1
 from .filters     import filter_entries, parse_since   # L2 sidequest session-2
+from .exporters   import export_markdown, export_json, export_obsidian  # session-3
 
 __all__ = [
     "TextEncoder", "TfidfJLEncoder",
@@ -25,4 +26,5 @@ __all__ = [
     "KnowledgeStore",
     "migrate_add_uuid",
     "filter_entries", "parse_since",
+    "export_markdown", "export_json", "export_obsidian",
 ]

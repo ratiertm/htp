@@ -80,11 +80,11 @@ def test_core_file_does_not_import_runtime(py_file: pathlib.Path):
 # ══════════════════════════════════════════════════════════
 
 @pytest.mark.parametrize("py_file", [
-    p for p in _KNOWLEDGE_DIR.glob("*.py")
+    p for p in _KNOWLEDGE_DIR.rglob("*.py")     # session-3: rglob 으로 cli/ 재귀
     if p.name != "__init__.py"
 ] if _KNOWLEDGE_DIR.exists() else [])
 def test_knowledge_file_dag_isolation(py_file: pathlib.Path):
-    """htp/knowledge/<file>.py 가 htp.runtime/thalamus/memory 를 import 하지 않아야 함."""
+    """htp/knowledge/<file>.py (+ cli/ 하위) 가 htp.runtime/thalamus/memory 미참조."""
     from_mods = _from_modules(py_file)
     direct    = _direct_imports(py_file)
 
@@ -93,9 +93,11 @@ def test_knowledge_file_dag_isolation(py_file: pathlib.Path):
         m for m in from_mods + direct
         if m and any(f in m for f in forbidden)
     ]
+    # session-3: cli/ 도 동일 규칙 (htp/knowledge/cli/* 미참조)
+    rel = py_file.relative_to(_KNOWLEDGE_DIR.parent)
     assert not violations, (
-        f"DAG violation in htp/knowledge/{py_file.name}: {violations}\n"
-        f"htp/knowledge/* 는 htp.runtime/thalamus/memory 를 import 할 수 없음"
+        f"DAG violation in {rel}: {violations}\n"
+        f"htp/knowledge/* (cli/ 포함) 는 htp.runtime/thalamus/memory 미참조"
     )
 
 
