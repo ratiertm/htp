@@ -41,10 +41,9 @@ class RegionSignature:
             # 0-vector 초기화 (냉시작 마커)
             self.centroid = np.zeros(self.dim, dtype=np.float64)
         elif self.centroid.shape != (self.dim,):
-            raise ValueError(
-                f"RegionSignature centroid shape {self.centroid.shape} "
-                f"!= expected ({self.dim},)"
-            )
+            # [sub-5] dim 동적 추론 — centroid 가 dim 인자보다 우선
+            # 384/768 dim 사전학습 임베딩 지원 (Plan FR-10)
+            self.dim = int(self.centroid.shape[0])
 
     def update(self, input_vec: np.ndarray) -> None:
         """EMA centroid 업데이트 — lr = 1 / (count + 1).
