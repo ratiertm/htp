@@ -58,12 +58,22 @@ class EmbeddingBridge:
         return None
 
     def encode(self, text: str) -> np.ndarray:
-        """단일 텍스트 → vector. D1: adapter 가 no_grad 보장."""
-        return self._adapter.encode_one(text)
+        """문서 저장용 인코딩 (passage mode) — D1: adapter 가 no_grad 보장.
+
+        ingest 시 사용. e5 의 "passage: " prefix 적용.
+        """
+        return self._adapter.encode_one(text, is_query=False)
+
+    def encode_query(self, text: str) -> np.ndarray:
+        """검색 질의용 인코딩 (query mode) — sub-5 merge plan §2.
+
+        query 시 사용. e5 의 "query: " prefix 적용으로 검색 품질 향상.
+        """
+        return self._adapter.encode_one(text, is_query=True)
 
     def encode_batch(self, texts: list[str]) -> np.ndarray:
-        """다중 텍스트 batch encoding (효율)."""
-        return self._adapter.encode_batch(texts)
+        """다중 텍스트 batch encoding (효율) — passage mode."""
+        return self._adapter.encode_batch(texts, is_query=False)
 
     def save(self, path: Path | str) -> None:
         """metadata 만 pickle — 모델 자체는 HF 캐시 (재사용)."""

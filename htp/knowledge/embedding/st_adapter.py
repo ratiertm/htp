@@ -54,18 +54,32 @@ class STAdapter:
     def model_name(self) -> str:
         return self._model_name
 
-    def encode_one(self, text: str) -> np.ndarray:
-        # D1: torch.no_grad() context — gradient computation 완전 차단
+    def encode_one(self, text: str, *, is_query: bool = False) -> np.ndarray:
+        """단일 텍스트 인코딩.
+
+        e5 모델은 query/passage prefix 로 최적 성능 (sub-5 merge plan §2):
+          - is_query=True:  검색 질의 시 ("query: " prefix)
+          - is_query=False: 문서 저장 시 ("passage: " prefix)
+
+        e5 가 아닌 모델은 prefix 가 무해 (성능 영향 미미).
+
+        D1 ③: torch.no_grad() context — gradient 계산 완전 차단.
+        """
+        prefix = "query: " if is_query else "passage: "
         with self._torch.no_grad():
             vec = self._model.encode(
-                text, normalize_embeddings=True, show_progress_bar=False,
+                prefix + text, normalize_embeddings=True, show_progress_bar=False,
             )
         return np.asarray(vec, dtype=np.float64)
 
-    def encode_batch(self, texts: list[str]) -> np.ndarray:
+    def encode_batch(self, texts: list[str], *, is_query: bool = False
+                    ) -> np.ndarray:
+        """배치 인코딩 — 동일 prefix 정책."""
+        prefix = "query: " if is_query else "passage: "
+        prefixed = [prefix + t for t in texts]
         with self._torch.no_grad():
             vecs = self._model.encode(
-                texts, normalize_embeddings=True,
+                prefixed, normalize_embeddings=True,
                 batch_size=8, show_progress_bar=False,
             )
         return np.asarray(vecs, dtype=np.float64)

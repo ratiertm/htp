@@ -23,11 +23,16 @@ from sklearn.random_projection      import GaussianRandomProjection
 
 @runtime_checkable
 class TextEncoder(Protocol):
-    """텍스트 → 64-dim 벡터 인코딩 프로토콜."""
+    """텍스트 → 벡터 인코딩 프로토콜 (sub-1 도입, sub-5 확장).
+
+    sub-5: encode_query() 추가 — e5 prefix 같은 query/passage 구분 모델 지원.
+    구분 없는 모델 (TF-IDF 등) 은 encode() 와 동일 동작.
+    """
 
     @property
     def dim(self) -> int: ...
     def encode(self, text: str) -> np.ndarray: ...
+    def encode_query(self, text: str) -> np.ndarray: ...
     def fit(self, corpus: list[str]) -> None: ...
 
 
@@ -74,6 +79,13 @@ class TfidfJLEncoder:
         else:
             self._jl.fit(X_sparse)
         self._fitted = True
+
+    def encode_query(self, text: str) -> np.ndarray:
+        """query mode 인코딩 — TF-IDF 는 query/passage 구분 없음.
+
+        sub-5 merge plan §2.4: TextEncoder Protocol 호환 위한 동일 동작.
+        """
+        return self.encode(text)
 
     def encode(self, text: str) -> np.ndarray:
         """text → 64-dim 벡터 (L2 정규화)."""
