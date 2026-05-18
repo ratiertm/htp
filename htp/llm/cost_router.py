@@ -84,3 +84,42 @@ class CostRouter:
             f"ema_lat={self._ema_lat:.1f}ms  "
             f"budget=${self.budget:.4f}"
         )
+
+    # ── sub-4 Stage 4 FR-18: 4-Level 의사결정 ─────────
+    # Design Ref: docs/02-design/features/htp-thalamus-car.sub-4.design.md §3-3
+    # 기존 7-method (update/pressure/status/suggest_model/routing_score/should_block/report)
+    # 모두 보존. select_level 만 추가 (C-3).
+
+    LEVEL_LOCAL    = 1   # TF-IDF / keyword 매칭 — 비용 0
+    LEVEL_SLLM     = 2   # sLLM (e5-small 등) — 로컬 384-dim 임베딩
+    LEVEL_API_SMALL = 3  # API 소형 — Haiku
+    LEVEL_API_LARGE = 4  # API 대형 — Sonnet / Opus
+
+    def select_level(self, query_complexity: float = 0.5) -> int:
+        """4-Level 의사결정 — 비용 압박 × 쿼리 복잡도.
+
+        Plan §SUCCESS Level 1-2 비율 70% 목표 → 압박 시 하향, 단순 쿼리는 하향.
+
+        Returns
+        -------
+        int : LEVEL_LOCAL (1) ~ LEVEL_API_LARGE (4)
+        """
+        if not (0.0 <= query_complexity <= 1.0):
+            raise ValueError(
+                f"query_complexity ∈ [0,1], got {query_complexity}",
+            )
+        p = self.pressure
+        # 비용 극압박 — 로컬 폴백
+        if p > 0.8:
+            return self.LEVEL_LOCAL
+        # 압박 + 단순 쿼리 → sLLM
+        if p > 0.5 and query_complexity < 0.5:
+            return self.LEVEL_SLLM
+        # 복잡 쿼리 → 대형 모델 (압박 없을 때만 의미 있음)
+        if query_complexity > 0.8:
+            return self.LEVEL_API_LARGE
+        # 중간 쿼리 → API 소형
+        if query_complexity > 0.5:
+            return self.LEVEL_API_SMALL
+        # default — sLLM (대부분 쿼리)
+        return self.LEVEL_SLLM

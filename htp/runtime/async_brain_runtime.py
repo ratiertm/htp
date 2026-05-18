@@ -33,9 +33,9 @@ class AsyncBrainRuntime(BrainRuntime):
 
     사용법
     ------
-    # 비동기
+    # 비동기 (sub-4: LLMRegion 으로 교체. LLMRegionRuntime 은 archive 이동)
     brain = AsyncBrainRuntime(sla_sec=8.0)
-    brain.add_region("language", LLMRegionRuntime(...))
+    brain.add_region("language", LLMRegion("language", specialty="language", use_mock=True))
     action = await brain.arun("입력 데이터")
 
     # 동기 (내부적으로 asyncio.run 사용)
@@ -89,12 +89,17 @@ class AsyncBrainRuntime(BrainRuntime):
         if self._cc is not None:
             self._cc.apply(thal_out)
 
-        # winner Region의 LLM 응답을 action.result에 채움
+        # winner Region의 응답을 action.result에 채움.
+        # sub-4: LLMRegion._last_result 는 dict, RegionRuntime._last_result 는 RunResult.
+        # hasattr 분기로 두 케이스 모두 지원.
         winner_region = self.regions.get(action.winner)
         if winner_region is not None:
             last = getattr(winner_region, "_last_result", None)
             if last is not None:
-                action.result = last.outputs.get(action.winner)
+                if hasattr(last, "outputs"):
+                    action.result = last.outputs.get(action.winner)
+                else:
+                    action.result = last
 
         return action
 

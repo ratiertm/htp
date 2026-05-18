@@ -30,6 +30,26 @@
 
 → design §9 "3개 중 2개 이상 → 가설 지지" **충족**. 시스템 A 의 가치 검증 완료.
 
+### sub-4 (Stage 4+5) **완료** (2026-05-19)
+
+`docs/02-design/features/htp-thalamus-car.sub-4.design.md` Architecture B 채택.
+Session A→B→C 순차 진행, 회귀 0 깨짐.
+
+| Session | 결과 |
+|---------|------|
+| A (M1+M2+M3) | ExternalRegion + LLMRegion + CostRouter.select_level (4-Level). 25 tests |
+| B (M4+M5+M7) | LLMRegionRuntime archive 이동 + demo. 회귀 보존 |
+| C (M6+M8) | PipelinedBrainRuntime + throughput 측정. 6 tests |
+
+Match Rate **91%** — `docs/03-analysis/htp-thalamus-car.sub-4.analysis.md`.
+
+**Throughput 실측** (PipelinedBrainRuntime vs AsyncBrainRuntime):
+- N=4 → 1.95-2.00× / N=8 → 2.55-2.64× / N=16 → 2.65-2.67×
+- Plan §SUCCESS 목표 1.5× 모두 큰 마진 초과.
+
+C-1 (demo) ✓ / C-2 (LLMNode 내부 멤버) ✓ / C-3 (CostRouter 7-method 보존) ✓ /
+C-4 (graphify isolated 50% 감소) — **△ 정량 측정 후속 cycle**.
+
 ### Bridge 후속 cycle — Q2 retune **완료** (2026-05-18)
 
 측정 기반 encoder 분기 구현. 모든 항목 해결:

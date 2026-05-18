@@ -46,8 +46,15 @@ from .memory import (
 
 
 # ── Phase 4: LLM-as-Node + Async ────────────────────
-from .llm import LLMNode, MockLLMNode, CostRouter, LLMRegionRuntime
+# sub-4 (2026-05-19): LLMRegion + ExternalRegion 신규.
+# LLMRegionRuntime → archive/deprecated_phase4/ (Plan FR-20, C-4 isolated 감소).
+from .llm import (
+    LLMNode, MockLLMNode, CostRouter,
+    LLMRegion, SPECIALTY_PROMPTS,
+)
+from .runtime.external_region    import ExternalRegion
 from .runtime.async_brain_runtime import AsyncBrainRuntime
+from .runtime.pipelined_brain     import PipelinedBrainRuntime
 
 __all__ = [
     # Phase 1
@@ -83,8 +90,11 @@ __all__ = [
     "LLMNode",
     "MockLLMNode",
     "CostRouter",
-    "LLMRegionRuntime",
+    "LLMRegion",
+    "SPECIALTY_PROMPTS",
+    "ExternalRegion",
     "AsyncBrainRuntime",
+    "PipelinedBrainRuntime",
     # Phase 5
     "MemorySystem",
     "Episode",
