@@ -30,12 +30,14 @@ def list_run(args) -> int:
         print("no entries")
         return 0
 
-    print(f"  id        source          timestamp                preview")
-    print(f"  --------  --------------  -----------------------  -------")
+    print(f"     id        source          timestamp                preview")
+    print(f"     --------  --------------  -----------------------  -------")
     for e in limited:
         preview = e.text[:50] + ("..." if len(e.text) > 50 else "")
         ts = (e.timestamp or "")[:19]
-        print(f"  {e.id[:8]}  {e.source:14}  {ts:23}  {preview}")
+        # htp-conflict-interpretation: 해석 보유 entry 는 💡 마크.
+        marker = "💡 " if getattr(e, "interpretation", None) else "   "
+        print(f"  {marker}{e.id[:8]}  {e.source:14}  {ts:23}  {preview}")
     print(f"\n({len(limited)} of {len(filtered)} after filter)")
     return 0
 

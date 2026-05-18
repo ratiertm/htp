@@ -51,6 +51,9 @@ def _do_ingest_single(args, text: str) -> int:
             print(f"  ⚠ 충돌 감지 (coherence={ci['coherence']:.2f}, "
                   f"conflict={ci['conflict']:.2f})")
             print(f"     → 기존 지식과 모순될 수 있음")
+            # htp-conflict-interpretation §1: LLM 자연어 해석 출력
+            if result.entry.interpretation:
+                print(f"  💡 해석: {result.entry.interpretation}")
         else:
             print(f"  ✓ 정합성 양호 (coherence={ci['coherence']:.2f})")
     return 0

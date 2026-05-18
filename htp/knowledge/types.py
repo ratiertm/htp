@@ -35,6 +35,10 @@ class KnowledgeEntry:
     # ── L2 sidequest 확장 ──────────────────────
     id:   str       = field(default_factory=lambda: str(uuid.uuid4()))
     tags: list[str] = field(default_factory=list)
+    # ── htp-conflict-interpretation 확장 (2026-05-19) ──
+    # CoherenceGate escalate=True 시 LLMRegion 의 자연어 해석. backward-compat
+    # 위해 default=None — 기존 jsonl 엔트리도 그대로 로드 가능.
+    interpretation: "str | None" = None
 
 
 @dataclass

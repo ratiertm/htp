@@ -62,6 +62,8 @@ class KnowledgeStore:
             # L2 sidequest 신규 필드
             "id":             getattr(entry, "id", None),
             "tags":           getattr(entry, "tags", []),
+            # htp-conflict-interpretation 신규 필드 (None 도 명시 저장)
+            "interpretation": getattr(entry, "interpretation", None),
         }
         with self.path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
@@ -128,6 +130,8 @@ class KnowledgeStore:
                     conflict_count = rec.get("conflict_count", 0),
                     id             = ent_id,
                     tags           = list(rec.get("tags", []) or []),
+                    # htp-conflict-interpretation — legacy 호환 (.get fallback)
+                    interpretation = rec.get("interpretation"),
                 )
 
                 # 중복 id 방어 — 같은 id 가 두 번 나오면 후자가 우선 (edit replacement)

@@ -105,6 +105,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p_m = sub.add_parser("migrate", help="기존 jsonl maintenance")
     p_m.add_argument("--add-uuid", action="store_true",
                      help="기존 entry 에 UUID 영구 부여")
+    p_m.add_argument("--add-interpretation", action="store_true",
+                     help="기존 entry 에 interpretation=null 필드 명시 (htp-conflict-interpretation)")
 
     return parser
 
@@ -131,10 +133,18 @@ def _dispatch(args) -> int:
         from ..persistence import KnowledgeStore
         if args.add_uuid:
             result = _mig.migrate_add_uuid(KnowledgeStore.default().path)
-            print(f"migrated {result['migrated']} entries")
+            print(f"migrated {result['migrated']} entries (UUID)")
             print(f"backup: {result['backup_path']}")
             return 0
-        print("migrate: nothing to do (use --add-uuid)")
+        if args.add_interpretation:
+            result = _mig.migrate_add_interpretation(
+                KnowledgeStore.default().path,
+            )
+            print(f"migrated {result['migrated']} entries (interpretation field)")
+            print(f"  with interpretation: {result['had_interpretation']}")
+            print(f"backup: {result['backup_path']}")
+            return 0
+        print("migrate: nothing to do (use --add-uuid or --add-interpretation)")
         return 1
     return 1
 

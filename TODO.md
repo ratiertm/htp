@@ -1,16 +1,51 @@
 # HTP — TODO / Handoff
 
-**Last updated**: 2026-05-19 (sub-4 완료 + 외부 리뷰 합의)
-**Last commit**: `8063975` sub-4 외부 리뷰 리포트 (master, push 완료)
-**Current state**: **sub-4 PDCA 종료 (91% Match Rate). 다음 cycle 방향 결정 완료** — LLMRegion ↔ CoherenceGate conflict 해석 연결.
+**Last updated**: 2026-05-19 (htp-conflict-interpretation 완료)
+**Last commit**: TBD (push 직전)
+**Current state**: **htp-conflict-interpretation PDCA 종료 (96% Match Rate)** — sub-3 × sub-4 × Bridge 의 곱이 사용자 가치로 발현.
 
 다음 세션에서 이 파일부터 읽고 시작.
 
 ---
 
-## 🎯 다음 cycle (1순위) — `htp-conflict-interpretation`
+## ✅ htp-conflict-interpretation (완료, 2026-05-19)
 
-### 핵심 가설
+**Match Rate 96%** — `docs/04-report/htp-conflict-interpretation.report.md`.
+
+| SC | 결과 |
+|----|------|
+| 회귀 보존 | 258 → **271** PASS (+13) |
+| escalate 시 interpretation | ✓ Mock 시연 PASS |
+| Mock default | ✓ 무지정 시 자동 |
+| JSONL 영속화 | ✓ round-trip |
+| cap 동작 | ✓ `_can_interpret()` |
+| 실데이터 1건 | △ Mock PASS, 실 API 사용자 후속 |
+
+원칙 실 적용: **"인프라는 충분하다. 만든 것을 연결하라."**
+
+---
+
+## 🎯 다음 cycle 후보 (선택지)
+
+### A. (선택) 실 API 1회 시연 — 30분
+prompt 품질 평가 + 실 LLM interpretation 의미 검증. ANTHROPIC_API_KEY 필요.
+
+### B. Memory ↔ KnowledgeLoop 연결 — 다음 single-connection
+해석 결과를 Memory 의 Episode 로 저장 → CA3 pattern completion 으로 향후 recall.
+sub-3 / 이번 cycle / Memory 의 곱. "한 번에 한 연결만" 원칙 유지.
+
+### C. e5 escalation_threshold default 재조정 — Vault 실 분포 측정
+이번 cycle 발견: e5 default 0.135 marginal. 사용자가 override 명시 필요. Vault 실 분포
+측정해 default 조정.
+
+### D. C-4 graphify 측정 (sub-4 미완) — 30분
+sub-4 의 partial SC 닫기.
+
+---
+
+## ── 참고 (이전 cycle 흐름) ──
+
+### 핵심 가설 (htp-conflict-interpretation)
 
 > **CoherenceGate 가 감지한 충돌 (escalate=True) 을 LLMRegion 이 자연어로 해석해
 > 새로운 통찰 가설을 제안한다. 이것이 "창의성의 라이브러리" 의 첫 실제 사례다.**

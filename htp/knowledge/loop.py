@@ -26,6 +26,11 @@ from htp.thalamus.types     import RegionResponse
 from htp.thalamus.router.vector_router import VectorRouter
 from htp.thalamus.region_signal import RegionSignal
 
+# htp-conflict-interpretation §2 M3: LLMRegion + prompt helper.
+# Architecture B (Auto Mock default) — None 이면 자동 MockLLMRegion 생성.
+from htp.llm.llm_region   import LLMRegion
+from .conflict_prompt     import SYSTEM_PROMPT, build_conflict_prompt
+
 
 # ══════════════════════════════════════════════════════════
 # Q2 retune (2026-05-18): encoder 별 CoherenceGate threshold default.
@@ -124,11 +129,18 @@ class KnowledgeLoop:
                  conflict_threshold: float = 0.3,
                  resonance_threshold: float = 0.7,
                  discover_threshold: float = 0.6,
-                 coherence_thresholds: "tuple[float, float] | None" = None):
+                 coherence_thresholds: "tuple[float, float] | None" = None,
+                 conflict_interpreter: "LLMRegion | None" = None,
+                 max_interpretations: int = 20):
         """
         coherence_thresholds: (conflict, escalation) for CoherenceGate.
           None 이면 encoder 종류에 맞는 default 자동 선택 (Q2 retune 2026-05-18).
-          명시값은 default 보다 우선.
+
+        conflict_interpreter: htp-conflict-interpretation Architecture B.
+          None 이면 자동 MockLLMRegion 생성 (안전 default — API 키 불필요).
+          사용자가 실 LLMRegion 인스턴스 넘기면 그것 사용.
+        max_interpretations: 한 KnowledgeLoop 인스턴스에서 escalate=True 시
+          호출 가능한 최대 횟수. CostRouter.should_block 과 합쳐 cap.
         """
         self.encoder = encoder
         self.store   = store or KnowledgeStore.default()
@@ -137,6 +149,18 @@ class KnowledgeLoop:
         self.discover_threshold  = discover_threshold
         self._cache: list[KnowledgeEntry] = self.store.load_all()
         self._coherence_thresholds = coherence_thresholds   # __init__ 후반에 사용
+
+        # htp-conflict-interpretation: conflict interpreter DI
+        if conflict_interpreter is None:
+            conflict_interpreter = LLMRegion(
+                region_name = "conflict_interpreter",
+                specialty   = "reasoning",
+                system      = SYSTEM_PROMPT,
+                use_mock    = True,
+            )
+        self.conflict_interpreter   = conflict_interpreter
+        self.max_interpretations    = max_interpretations
+        self._interpretations_count = 0
 
         # Critical Gap #3 옵션 A-2: encoder state 영속화.
         # CLI 다중 호출 시 동일 임베딩 공간 보장 — fit 결과를 디스크에 저장/복원.
@@ -212,11 +236,17 @@ class KnowledgeLoop:
         # Bridge Integration §3 (S2): CoherenceGate — 새 vec + 상위 이웃 정합성 측정.
         coherence_info = self._evaluate_coherence(vec, source, neighbors)
 
+        # htp-conflict-interpretation §1 데이터흐름: escalate=True 시 LLM 해석.
+        interpretation = self._maybe_interpret_conflict(
+            text, source, neighbors, coherence_info,
+        )
+
         entry = KnowledgeEntry(
             text=text, vec=vec, source=source,
             timestamp=datetime.now(timezone.utc).isoformat(),
             neighbors=[(n.entry_id, n.similarity) for n in neighbors],
             conflict_count=len(conflicts),
+            interpretation=interpretation,
         )
         self._cache.append(entry)
         self.store.append(entry)
@@ -261,6 +291,62 @@ class KnowledgeLoop:
             "conflict":  float(bound.conflict),
             "escalate":  bool(bound.escalate_to_pfc),
         }
+
+    # ── htp-conflict-interpretation §2 M3 — escalate=True 자연어 해석 ──
+    def _can_interpret(self) -> bool:
+        """cap + CostRouter.should_block 합쳐 호출 여부 판단.
+
+        cap (max_interpretations) 은 세션 단위 안전 장치 — 실 API 비용 폭증 방지.
+        CostRouter.should_block 은 EMA 비용 압박 기반 (LLMRegion 내부 상태).
+        """
+        if self._interpretations_count >= self.max_interpretations:
+            return False
+        router = getattr(self.conflict_interpreter, "router", None)
+        if router is not None and router.should_block():
+            return False
+        return True
+
+    def _maybe_interpret_conflict(
+        self,
+        text:           str,
+        source:         str,
+        neighbors:      "list[Neighbor]",
+        coherence_info: "dict | None",
+    ) -> "str | None":
+        """coherence_info["escalate"]=True 시 LLMRegion 으로 충돌 해석.
+
+        Design §1 데이터흐름. 실패해도 ingest 자체는 계속 진행 (graceful).
+        """
+        if not coherence_info or not coherence_info.get("escalate"):
+            return None
+        if not self._can_interpret():
+            return None
+
+        existing = [
+            (self._cache[n.entry_id].text, self._cache[n.entry_id].source)
+            for n in neighbors[:3]
+        ]
+        prompt = build_conflict_prompt(
+            new_text   = text,
+            new_source = source,
+            existing   = existing,
+            coherence  = coherence_info["coherence"],
+            conflict   = coherence_info["conflict"],
+        )
+        try:
+            result = self.conflict_interpreter.run(prompt)
+        except Exception as e:
+            return f"(interpretation failed: {e})"
+
+        self._interpretations_count += 1
+
+        if isinstance(result, dict):
+            return (
+                result.get("interpretation")
+                or result.get("text")
+                or str(result)
+            )
+        return str(result)
 
     # ── batch ingest (L2 sidequest F1) ────────────────────
     def ingest_batch(self, texts: list[str], source: str = ""

@@ -58,4 +58,45 @@ def migrate_add_uuid(jsonl_path: Path | str,
     }
 
 
-__all__ = ["migrate_add_uuid"]
+def migrate_add_interpretation(jsonl_path: Path | str,
+                               backup_suffix: str = ".pre-interpretation.bak"
+                               ) -> dict:
+    """기존 jsonl 의 entry 에 interpretation 필드 명시적 부여 (None default).
+
+    backward-compat 는 KnowledgeStore.load_all 의 `.get("interpretation")` fallback
+    으로 이미 보장되므로 *필수는 아님*. 다만 외부 도구 / 문서 호환성을 위해
+    명시화하고 싶을 때 사용.
+
+    절차:
+      1. 백업 생성 (`<path>.pre-interpretation.bak`)
+      2. load_all 로 entry 복원 (interpretation 없는 entry 는 None)
+      3. 새 jsonl 작성 (모든 entry 에 interpretation 포함)
+
+    반환: {"migrated": N, "backup_path": str, "had_interpretation": int}
+    """
+    p = Path(jsonl_path)
+    if not p.exists():
+        return {"migrated": 0, "backup_path": None,
+                "had_interpretation": 0}
+
+    backup = p.with_suffix(p.suffix + backup_suffix)
+    shutil.copy2(p, backup)
+
+    store   = KnowledgeStore(p)
+    entries = store.load_all()
+    had_inter = sum(1 for e in entries
+                     if getattr(e, "interpretation", None))
+
+    p.unlink()
+    new_store = KnowledgeStore(p)
+    for entry in entries:
+        new_store.append(entry)
+
+    return {
+        "migrated":           len(entries),
+        "backup_path":        str(backup),
+        "had_interpretation": had_inter,
+    }
+
+
+__all__ = ["migrate_add_uuid", "migrate_add_interpretation"]
