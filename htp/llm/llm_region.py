@@ -68,7 +68,14 @@ class LLMRegion(ExternalRegion):
         system:      "str | None" = None,
         budget:      float = 0.01,
         use_mock:    bool  = False,
+        llm_node:    "object | None" = None,
     ):
+        """
+        llm_node: override — 명시 시 그 인스턴스를 self._llm_node 로 사용.
+          LLMNode / MockLLMNode / ClaudeCliNode 등 동일 interface (name/run/arun/
+          _token_log/cost_report) 만족하면 됨. None 이면 use_mock 에 따라
+          기존 LLMNode/MockLLMNode 자동 생성.
+        """
         self.region_name = region_name
         self.specialty   = specialty
         self.step        = 0
@@ -80,13 +87,16 @@ class LLMRegion(ExternalRegion):
         self.router   = CostRouter(budget_per_step=budget)
         self.use_mock = use_mock
 
-        NodeClass = MockLLMNode if use_mock else LLMNode
-        self._llm_node = NodeClass(
-            name        = f"{region_name}_llm",
-            model       = self.router.suggest_model(self.model),
-            system      = self.system,
-            tags        = set(specialty.replace("_", " ").split()),
-        )
+        if llm_node is not None:
+            self._llm_node = llm_node
+        else:
+            NodeClass = MockLLMNode if use_mock else LLMNode
+            self._llm_node = NodeClass(
+                name        = f"{region_name}_llm",
+                model       = self.router.suggest_model(self.model),
+                system      = self.system,
+                tags        = set(specialty.replace("_", " ").split()),
+            )
         self._last_result: "dict | None" = None
 
     # ── ExternalRegion interface ─────────────────────────

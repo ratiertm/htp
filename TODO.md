@@ -27,8 +27,19 @@
 
 ## 🎯 다음 cycle 후보 (선택지)
 
-### A. (선택) 실 API 1회 시연 — 30분
-prompt 품질 평가 + 실 LLM interpretation 의미 검증. ANTHROPIC_API_KEY 필요.
+### ✅ A. 실 API 시연 완료 (2026-05-19) — `ClaudeCliNode` 도입
+
+`htp/llm/claude_cli_node.py` 신규 — `claude -p` subprocess (OAuth headless).
+ANTHROPIC_API_KEY 제거된 env 로 OAuth session 강제. LLMRegion drop-in 호환.
+
+**시연 결과** (`docs/03-analysis/htp-conflict-interpretation-real-api-시연.md`):
+- 시나리오 1 (인프라 vs 뇌과학): "eviction = pruning, load balancing = lateral
+  inhibition, service mesh = recurrent connectivity" — 구조적 유사성 발견
+- 시나리오 2 (뇌 vs Transformer attention): "scope × temporal 2-axis 분해"
+
+→ Mock 의 echo 와 질적으로 완전히 다른 의미 있는 통찰. SC6 ✅ PASS.
+
+후속: latency ~12s/call (subprocess overhead) — UX 개선 검토 필요.
 
 ### B. Memory ↔ KnowledgeLoop 연결 — 다음 single-connection
 해석 결과를 Memory 의 Episode 로 저장 → CA3 pattern completion 으로 향후 recall.
