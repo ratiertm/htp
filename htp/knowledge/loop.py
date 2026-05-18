@@ -215,7 +215,10 @@ class KnowledgeLoop:
     def query(self, question: str) -> QueryResult:
         if not self._cache:
             return QueryResult(question=question, relevant=[], cluster_count=0)
-        q_vec = self.encoder.encode(question)
+        # sub-5 merge plan §2: query mode encoding (e5 prefix 활용)
+        # encode_query 미지원 인코더는 encode 와 동일 동작
+        encode_q = getattr(self.encoder, "encode_query", None) or self.encoder.encode
+        q_vec = encode_q(question)
         relevant = self._find_neighbors(q_vec, top_k=10)
         clusters = self._count_clusters(relevant)
         return QueryResult(question=question, relevant=relevant,

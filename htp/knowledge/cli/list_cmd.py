@@ -3,18 +3,19 @@ from __future__ import annotations
 
 import sys
 
-from ..encoder import TfidfJLEncoder
+from ._common import make_loop
 from ..filters import filter_entries
 from ..loop    import KnowledgeLoop
 
 
-def _make_loop() -> KnowledgeLoop:
-    return KnowledgeLoop(encoder=TfidfJLEncoder())
+def _make_loop(args=None) -> KnowledgeLoop:
+    enc_type = getattr(args, "encoder", "tfidf") if args else "tfidf"
+    return make_loop(enc_type)
 
 
 # ── list ──────────────────────────────────────────
 def list_run(args) -> int:
-    loop = _make_loop()
+    loop = _make_loop(args)
     try:
         filtered = filter_entries(
             loop._cache,
@@ -41,7 +42,7 @@ def list_run(args) -> int:
 
 # ── delete ────────────────────────────────────────
 def delete_run(args) -> int:
-    loop = _make_loop()
+    loop = _make_loop(args)
     ok = loop.delete(args.entry_id)
     if not ok:
         # full UUID 가 아닐 수도 — prefix 매칭 시도
@@ -62,7 +63,7 @@ def delete_run(args) -> int:
 
 # ── edit ──────────────────────────────────────────
 def edit_run(args) -> int:
-    loop = _make_loop()
+    loop = _make_loop(args)
     target = _resolve_id(loop, args.entry_id)
     if target is None:
         print(f"edit: entry not found: {args.entry_id}", file=sys.stderr)
@@ -76,7 +77,7 @@ def edit_run(args) -> int:
 
 # ── tag ───────────────────────────────────────────
 def tag_run(args) -> int:
-    loop = _make_loop()
+    loop = _make_loop(args)
     target = _resolve_id(loop, args.entry_id)
     if target is None:
         print(f"tag: entry not found: {args.entry_id}", file=sys.stderr)

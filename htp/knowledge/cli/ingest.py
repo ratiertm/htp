@@ -4,12 +4,13 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from ..encoder import TfidfJLEncoder
+from ._common import make_loop
 from ..loop    import KnowledgeLoop
 
 
-def _make_loop() -> KnowledgeLoop:
-    return KnowledgeLoop(encoder=TfidfJLEncoder())
+def _make_loop(args=None) -> KnowledgeLoop:
+    enc_type = getattr(args, "encoder", "tfidf") if args else "tfidf"
+    return make_loop(enc_type)
 
 
 def run(args) -> int:
@@ -37,7 +38,7 @@ def _ingest_text_or_stdin(args) -> int:
 
 
 def _do_ingest_single(args, text: str) -> int:
-    loop = _make_loop()
+    loop = _make_loop(args)
     result = loop.ingest(text, source=args.source)
     if args.tag:
         loop.add_tags(result.entry.id, args.tag)
@@ -70,7 +71,7 @@ def _ingest_dir(args) -> int:
               file=sys.stderr)
         return 1
 
-    loop = _make_loop()
+    loop = _make_loop(args)
     texts: list[str] = []
     valid_files: list[Path] = []
     for f in files:
