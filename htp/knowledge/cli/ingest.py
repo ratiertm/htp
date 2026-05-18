@@ -43,6 +43,16 @@ def _do_ingest_single(args, text: str) -> int:
     if args.tag:
         loop.add_tags(result.entry.id, args.tag)
     print(f"✓ saved (id={result.entry.id[:8]}, source={args.source})")
+
+    # Bridge §3 (S2): CoherenceGate 정합성 신호 표시.
+    ci = result.coherence_info
+    if ci is not None:
+        if ci["escalate"]:
+            print(f"  ⚠ 충돌 감지 (coherence={ci['coherence']:.2f}, "
+                  f"conflict={ci['conflict']:.2f})")
+            print(f"     → 기존 지식과 모순될 수 있음")
+        else:
+            print(f"  ✓ 정합성 양호 (coherence={ci['coherence']:.2f})")
     return 0
 
 

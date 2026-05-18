@@ -103,7 +103,17 @@ tests/knowledge/                         [htp-thalamus-car sub-1 신규, 8개]
 └── test_loop.py                         ingest/query/discover + encoder 영속화 (Gap #3)
 ```
 
-**현재 테스트 baseline: 118 = regression 57 + unit 53 + knowledge 8** (1.30s)
+**현재 테스트 baseline: 222 = regression 57 + unit (DAG 양방향 강제 포함) + knowledge 30+** (~113s, EmbeddingBridge HF 캐시 warm 후)
+
+**Bridge Integration (2026-05-18 신규)**: `htp/knowledge/loop.py` 가 `htp/thalamus` 의
+RegionSignature / PairwiseCoherenceGate / VectorRouter 를 직접 사용 — 시스템 A↔B 단방향 연결.
+- 연결 1 (§2): source 별 RegionSignature 가 ingest vec 으로 Hebbian EMA 학습.
+- 연결 2 (§3): ingest 시 CoherenceGate.bind() 로 충돌 감지 → `IngestResult.coherence_info`.
+- 연결 3 (§4): `query(mode="routed")` 가 VectorRouter 로 활성 source 선택 후 검색,
+  CLI `--mode compare` 로 flat vs routed A/B 비교.
+- DAG: `knowledge → thalamus` 단방향 허용, `thalamus → knowledge` 영구 금지
+  (`test_thalamus_does_not_import_knowledge` 가 강제).
+- EmbeddingBridge 재검증: Q1/Q3 PASS, Q2 부분 — 시스템 A 가치 검증 성공.
 
 ### DAG 의존 방향 (Review Improvements 강제)
 

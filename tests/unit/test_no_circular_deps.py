@@ -74,9 +74,12 @@ def test_core_file_does_not_import_runtime(py_file: pathlib.Path):
 
 
 # ══════════════════════════════════════════════════════════
-# DAG 규칙 (htp-thalamus-car sub-1):
-# htp/knowledge/*.py 는 htp.runtime / htp.thalamus / htp.memory 모두 미참조
+# DAG 규칙 (htp-thalamus-car sub-1 + htp-bridge-integration §6):
+# htp/knowledge/*.py 는 htp.runtime / htp.memory 미참조 유지.
+# htp.thalamus 는 Bridge §6 의 명시적 허용 — knowledge → thalamus 단방향만.
+# 역방향 (thalamus → knowledge) 은 별도 룰에서 영구 금지.
 # Design Ref: htp-thalamus-car.design.md §2.2
+#             htp-bridge-integration-design.md §6 (knowledge → thalamus 허용)
 # ══════════════════════════════════════════════════════════
 
 @pytest.mark.parametrize("py_file", [
@@ -84,20 +87,52 @@ def test_core_file_does_not_import_runtime(py_file: pathlib.Path):
     if p.name != "__init__.py"
 ] if _KNOWLEDGE_DIR.exists() else [])
 def test_knowledge_file_dag_isolation(py_file: pathlib.Path):
-    """htp/knowledge/<file>.py (+ cli/ 하위) 가 htp.runtime/thalamus/memory 미참조."""
+    """htp/knowledge/<file>.py (+ cli/ 하위) 의 단방향 DAG.
+
+    Bridge Integration §6: thalamus 는 허용 (단방향), runtime/memory 는 금지.
+    """
     from_mods = _from_modules(py_file)
     direct    = _direct_imports(py_file)
 
-    forbidden = ("htp.runtime", "htp.thalamus", "htp.memory")
+    forbidden = ("htp.runtime", "htp.memory")
     violations = [
         m for m in from_mods + direct
         if m and any(f in m for f in forbidden)
     ]
-    # session-3: cli/ 도 동일 규칙 (htp/knowledge/cli/* 미참조)
     rel = py_file.relative_to(_KNOWLEDGE_DIR.parent)
     assert not violations, (
         f"DAG violation in {rel}: {violations}\n"
-        f"htp/knowledge/* (cli/ 포함) 는 htp.runtime/thalamus/memory 미참조"
+        f"htp/knowledge/* 는 htp.runtime/memory 미참조 (thalamus 는 Bridge §6 로 허용)"
+    )
+
+
+# ══════════════════════════════════════════════════════════
+# DAG 규칙 (htp-bridge-integration §6):
+# htp/thalamus/* 는 htp.knowledge 미참조 — 역방향 영구 금지.
+# 시스템 A 가 시스템 B 에 의존하면 layering 무너짐.
+# Design Ref: htp-bridge-integration-design.md §6
+# ══════════════════════════════════════════════════════════
+
+_THALAMUS_DIR = _PROJECT_ROOT / "htp" / "thalamus"
+
+
+@pytest.mark.parametrize("py_file", [
+    p for p in _THALAMUS_DIR.rglob("*.py")
+    if p.name != "__init__.py"
+] if _THALAMUS_DIR.exists() else [])
+def test_thalamus_does_not_import_knowledge(py_file: pathlib.Path):
+    """Bridge §6: htp/thalamus/* 어디에서도 htp.knowledge 참조 금지 (역방향 차단)."""
+    from_mods = _from_modules(py_file)
+    direct    = _direct_imports(py_file)
+
+    violations = [
+        m for m in from_mods + direct
+        if m and "htp.knowledge" in m
+    ]
+    rel = py_file.relative_to(_THALAMUS_DIR.parent)
+    assert not violations, (
+        f"역방향 DAG violation in {rel}: {violations}\n"
+        f"htp/thalamus/* 는 htp.knowledge 를 import 할 수 없음 (Bridge §6)"
     )
 
 

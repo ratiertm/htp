@@ -54,6 +54,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p_q.add_argument("--source", help="filter: source 일치만")
     p_q.add_argument("--since",  help="filter: 'Nd' / 'YYYY-MM' / ISO")
     p_q.add_argument("--tag",    help="filter: tag 포함")
+    # Bridge §4 (S3): VectorRouter A/B 비교 옵션.
+    p_q.add_argument("--mode", choices=["flat", "routed", "compare"],
+                     default="flat",
+                     help="flat=전체 순회 (기본), routed=VectorRouter, compare=A/B")
 
     # ── discover ──────────────────────────────────────
     p_d = sub.add_parser("discover", help="cross-domain 발견")

@@ -17,6 +17,15 @@ from .encoder     import TextEncoder
 from .persistence import KnowledgeStore
 from .types       import KnowledgeEntry, Tombstone   # L2 sidequest session-1
 
+# Design Ref: docs/02-design/features/htp-bridge-integration-design.md §2-4 (S1-S3)
+# 시스템 A (htp/thalamus) → 시스템 B (htp/knowledge) 단방향 import.
+# 역방향 import 금지 (test_no_circular_deps.py 가 영구 검증).
+from htp.thalamus.signature import RegionSignature
+from htp.thalamus.coherence.pairwise import PairwiseCoherenceGate
+from htp.thalamus.types     import RegionResponse
+from htp.thalamus.router.vector_router import VectorRouter
+from htp.thalamus.region_signal import RegionSignal
+
 
 # ══════════════════════════════════════════════════════════
 # Dataclass 정의
@@ -36,6 +45,7 @@ class IngestResult:
     neighbors: list
     conflicts: list
     resonances: list
+    coherence_info: "dict | None" = None   # Bridge §3 (S2): {coherence, conflict, escalate}
 
 
 @dataclass
@@ -43,6 +53,8 @@ class QueryResult:
     question: str
     relevant: list
     cluster_count: int
+    routing_info: "dict | None" = None   # Bridge §4 (S3): VectorRouter.last_metrics
+    mode: str = "flat"                    # Bridge §4 (S3): "flat" | "routed"
 
 
 @dataclass
@@ -93,6 +105,40 @@ class KnowledgeLoop:
         if hasattr(self.encoder, "load"):
             self.encoder.load(self._encoder_state_path)
 
+        # Bridge Integration §2: source 별 RegionSignature (시스템 A 학습 단위).
+        # 캐시 vec 으로부터 centroid 를 EMA 로 재구축 — 영속화 불필요 (vec 은 JSONL 보존).
+        self._signatures: dict[str, RegionSignature] = {}
+        self._rebuild_signatures()
+
+        # Bridge Integration §3 (S2): CoherenceGate — ingest 시 정합성 검사.
+        self._coherence = PairwiseCoherenceGate(
+            conflict_threshold   = 0.3,
+            escalation_threshold = 0.7,
+        )
+
+        # Bridge Integration §4 (S3): VectorRouter — query 시 source 범위 축소.
+        self._router = VectorRouter(beta=0.5)
+
+    # ── Bridge Integration §2 (S1) — RegionSignature ─────
+    def _rebuild_signatures(self) -> None:
+        """기존 _cache 에서 source 별 RegionSignature 를 재구축.
+
+        Bridge Design §2-2. encoder.fit 미완 상태에서 호출되어도 안전 —
+        cache 의 vec 은 저장 시점에 encode 된 것이라 그대로 사용 가능.
+        """
+        for entry in self._cache:
+            self._update_signature(entry.source, entry.vec)
+
+    def _update_signature(self, source: str, vec: np.ndarray) -> None:
+        """source 별 RegionSignature 점진 학습 (Hebbian EMA)."""
+        sig = self._signatures.get(source)
+        if sig is None or sig.dim != len(vec):
+            # dim 변경 시 (encoder 교체 등) 재초기화. centroid 인자로 dim 자동 추론.
+            sig = RegionSignature(centroid=np.zeros(len(vec), dtype=np.float64),
+                                  count=0, dim=len(vec))
+            self._signatures[source] = sig
+        sig.update(vec.astype(np.float64))
+
     # ── ingest ────────────────────────────────────────────
     def ingest(self, text: str, source: str = "") -> IngestResult:
         # Critical Gap #3 (옵션 A-2): encoder.fit() 1회 freeze + 영속화.
@@ -110,9 +156,15 @@ class KnowledgeLoop:
 
         # encoder 가 freeze 되므로 _cache 재-encode 불필요 (이전 옵션 B 제거).
 
+        # Bridge Integration §2 (S1): source 별 RegionSignature 점진 학습.
+        self._update_signature(source, vec)
+
         neighbors = self._find_neighbors(vec, top_k=5)
         conflicts  = [n for n in neighbors if n.similarity < self.conflict_threshold]
         resonances = [n for n in neighbors if n.similarity > self.resonance_threshold]
+
+        # Bridge Integration §3 (S2): CoherenceGate — 새 vec + 상위 이웃 정합성 측정.
+        coherence_info = self._evaluate_coherence(vec, source, neighbors)
 
         entry = KnowledgeEntry(
             text=text, vec=vec, source=source,
@@ -124,7 +176,45 @@ class KnowledgeLoop:
         self.store.append(entry)
 
         return IngestResult(entry=entry, neighbors=neighbors,
-                            conflicts=conflicts, resonances=resonances)
+                            conflicts=conflicts, resonances=resonances,
+                            coherence_info=coherence_info)
+
+    # ── Bridge Integration §3 (S2) — CoherenceGate ────────
+    def _evaluate_coherence(
+        self,
+        vec: np.ndarray,
+        source: str,
+        neighbors: "list[Neighbor]",
+    ) -> "dict | None":
+        """새 vec + 상위 이웃 (top 3) 을 RegionResponse 로 변환 → CoherenceGate.bind.
+
+        Bridge Design §3-2. neighbors < 2 면 정합성 비교 자체가 무의미 → None.
+        반환 dict: {coherence, conflict, escalate}.
+        """
+        if len(neighbors) < 2:
+            return None
+
+        responses = [
+            RegionResponse(
+                region_id  = f"new_{source}",
+                output_vec = np.asarray(vec, dtype=np.float64),
+                precision  = 1.0,
+            )
+        ]
+        for n in neighbors[:3]:
+            ne = self._cache[n.entry_id]
+            responses.append(RegionResponse(
+                region_id  = f"existing_{ne.source}",
+                output_vec = np.asarray(ne.vec, dtype=np.float64),
+                precision  = 1.0,
+            ))
+
+        bound = self._coherence.bind(responses)
+        return {
+            "coherence": float(bound.coherence),
+            "conflict":  float(bound.conflict),
+            "escalate":  bool(bound.escalate_to_pfc),
+        }
 
     # ── batch ingest (L2 sidequest F1) ────────────────────
     def ingest_batch(self, texts: list[str], source: str = ""
@@ -212,26 +302,99 @@ class KnowledgeLoop:
         return new_entry
 
     # ── query ─────────────────────────────────────────────
-    def query(self, question: str) -> QueryResult:
+    def query(self, question: str, mode: str = "flat") -> QueryResult:
+        """검색.
+
+        mode:
+          "flat"   — 기존 전체 _cache 순회 (backward-compat 기본값).
+          "routed" — VectorRouter 가 관련 source 선택 후 그 안에서 검색 (Bridge §4).
+        """
         if not self._cache:
-            return QueryResult(question=question, relevant=[], cluster_count=0)
+            return QueryResult(question=question, relevant=[],
+                               cluster_count=0, mode=mode)
         # sub-5 merge plan §2: query mode encoding (e5 prefix 활용)
         # encode_query 미지원 인코더는 encode 와 동일 동작
         encode_q = getattr(self.encoder, "encode_query", None) or self.encoder.encode
         q_vec = encode_q(question)
-        relevant = self._find_neighbors(q_vec, top_k=10)
+
+        routing_info = None
+        if mode == "routed" and self._signatures:
+            candidates, routing_info = self._routed_candidates(q_vec)
+        else:
+            candidates = list(range(len(self._cache)))
+
+        relevant = self._find_neighbors_among(q_vec, candidates, top_k=10)
         clusters = self._count_clusters(relevant)
         return QueryResult(question=question, relevant=relevant,
-                           cluster_count=clusters)
+                           cluster_count=clusters,
+                           routing_info=routing_info, mode=mode)
+
+    # ── Bridge Integration §4 (S3) — VectorRouter ─────────
+    def _routed_candidates(
+        self, q_vec: np.ndarray,
+    ) -> "tuple[list[int], dict]":
+        """VectorRouter 로 활성 source 선택 → 해당 source 의 entry index 만 반환.
+
+        Bridge Design §4-2. 모든 source score=0 (cold start 또는 무관) → fallback
+        으로 전체 cache 반환.
+        """
+        # torch import 는 placeholder output_vec 용 — RegionSignal 이 필수 필드로 요구.
+        # 시스템 A (RegionSignal) 를 수정하지 않기 위한 회피책 (Design §부록).
+        import torch
+        placeholder = torch.zeros(1)
+
+        # source 별 RegionSignal 합성 — VectorRouter 는 region_signature 만 참조.
+        signals = [
+            RegionSignal(
+                region_id        = source,
+                hub_strength     = 0.0,
+                fire_rate        = 0.0,
+                top_hubs         = [],
+                overload         = False,
+                output_vec       = placeholder,
+                precision        = 1.0,
+                region_signature = sig,
+            )
+            for source, sig in self._signatures.items()
+        ]
+        scores = self._router.score(None, q_vec.astype(np.float64), signals)
+
+        selected = {s.region_id for s in scores if s.score > 1e-8}
+        metrics = dict(self._router.last_metrics)   # snapshot
+
+        if not selected:
+            # 모든 source 가 0 → fallback (전체 순회)
+            metrics["fallback"] = "all_zero"
+            return list(range(len(self._cache))), metrics
+
+        idxs = [i for i, e in enumerate(self._cache) if e.source in selected]
+        metrics["selected_sources"] = sorted(selected)
+        metrics["candidate_count"]  = len(idxs)
+        return idxs, metrics
+
+    def _find_neighbors_among(
+        self, vec: np.ndarray, indices: "list[int]", top_k: int,
+    ) -> "list[Neighbor]":
+        """indices 내에서만 cosine 검색."""
+        if not indices:
+            return []
+        sims = [
+            Neighbor(entry_id=i, similarity=_cosine(vec, self._cache[i].vec))
+            for i in indices
+        ]
+        sims.sort(key=lambda n: n.similarity, reverse=True)
+        return sims[:top_k]
 
     # ── query_v2 (sub-5 merge plan 작업 3 — I5 confidence) ───
     def query_v2(self, question: str, top_k: int = 5,
-                 gap_threshold: "float | None" = None):
+                 gap_threshold: "float | None" = None,
+                 mode: str = "flat"):
         """confidence (top-1 vs top-2 gap) 포함 query — 신규.
 
         반환: QueryResultV2 (results + confidence + has_match).
 
         gap_threshold: None 이면 DEFAULT_GAP_THRESHOLD (0.005) 사용.
+        mode: "flat" | "routed" (Bridge §4 S3 — VectorRouter 활성 source 사전 필터).
         """
         from .confidence import QueryResultV2, ScoredResult, DEFAULT_GAP_THRESHOLD
 
@@ -244,7 +407,12 @@ class KnowledgeLoop:
 
         encode_q = getattr(self.encoder, "encode_query", None) or self.encoder.encode
         q_vec = encode_q(question)
-        neighbors = self._find_neighbors(q_vec, top_k=top_k)
+
+        if mode == "routed" and self._signatures:
+            candidates, _ = self._routed_candidates(q_vec)
+            neighbors = self._find_neighbors_among(q_vec, candidates, top_k=top_k)
+        else:
+            neighbors = self._find_neighbors(q_vec, top_k=top_k)
 
         sims = [n.similarity for n in neighbors]
         gap, has_match = QueryResultV2.compute_confidence(sims, gap_threshold)

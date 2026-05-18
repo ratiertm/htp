@@ -1,10 +1,42 @@
 # HTP — TODO / Handoff
 
-**Last updated**: 2026-05-18
-**Last commit**: `ff4aff7` sub-5 merge plan 작업 3 — I5 confidence (master, push 완료)
-**Current state**: sub-5 (Stage 6 EmbeddingBridge) **완료 + merge 됨** — 본질 한계 해결
+**Last updated**: 2026-05-18 (Bridge Integration 적용)
+**Last commit**: `5c4cb67` + Bridge Integration S1-S4 (한 PDCA cycle 완결)
+**Current state**: **시스템 A↔B 연결 완료** — 가설 검증 PASS (Q1/Q3 ✓, Q2 부분)
 
 다음 세션에서 이 파일부터 읽고 시작.
+
+---
+
+## 🌉 Bridge Integration (htp-bridge-integration) — 완료
+
+설계서 `docs/02-design/features/htp-bridge-integration-design.md` 의 3 연결 모두 구현·검증:
+
+| 연결 | 구현 위치 | 효과 |
+|------|----------|------|
+| §2 RegionSignature | `loop.ingest()` + `_update_signature()` | source 별 의미 중심 EMA 학습 |
+| §3 CoherenceGate | `loop._evaluate_coherence()` + `IngestResult.coherence_info` | ingest 시 충돌 감지 |
+| §4 VectorRouter | `loop.query(mode="routed")` + CLI `--mode compare` | 검색 노이즈 제거 |
+
+테스트: +11 신규 (`tests/knowledge/test_bridge_s{1,2,3}_*.py`) + DAG 양방향 강제 +14 (thalamus→knowledge 금지). **222/222 PASS**.
+
+### 가설 검증 결과 (EmbeddingBridge)
+
+| Q | 결과 | 비고 |
+|---|------|------|
+| Q1 domain discrimination | **PASS** | 뇌과학 0.865 > 인프라 0.823 |
+| Q2 coherence 모순/일관 | **부분** | 정성 PASS (일관 0.116 < 이질 0.152), 절대 threshold 미달 |
+| Q3 VectorRouter 정밀도 | **PASS** | 3/3 케이스에서 routed 가 flat 노이즈 제거 |
+
+→ design §9 "3개 중 2개 이상 → 가설 지지" **충족**. 시스템 A 의 가치 검증 완료.
+
+### Bridge 후속 cycle 필요 (Q2 미달 대응)
+
+1. **e5-small 전용 threshold 재튜닝** — `conflict_threshold=0.3 / escalation=0.7` 가
+   e5 의 cosine 0.85+ 영역 분포에 너무 엄격. `conflict_threshold ≈ 0.10` 권장.
+   sub-5 의 confidence gap 0.01 threshold 와 동일한 원리 (e5 임베딩 압축 분포).
+2. **TF-IDF 시 escalate 폭주** — TF-IDF + sparse 벡터에서 pair-wise cosine=0 인 경우
+   conflict=1.0 으로 고정됨. encoder 종류별 threshold 다이얼 필요.
 
 ---
 
