@@ -28,6 +28,38 @@ from htp.thalamus.region_signal import RegionSignal
 
 
 # ══════════════════════════════════════════════════════════
+# Q2 retune (2026-05-18): encoder 별 CoherenceGate threshold default.
+# 측정 기반 (15 entries × 3 source 의 intra/inter conflict 분포):
+#   TF-IDF       : intra/inter 모두 conflict ≈ 1.0 으로 포화 → escalation 비활성.
+#   EmbeddingBridge (e5-small): intra max=0.124, inter mean=0.116/max=0.141 →
+#                  분리 marginal 하지만 0.135 부근에서 일관/이질 구분 가능.
+# 사용자가 KnowledgeLoop(coherence_thresholds=(c, e)) 로 override 가능.
+# 알려지지 않은 encoder 는 보수적 default (0.3, 0.7) — PairwiseCoherenceGate 원래 값.
+# ══════════════════════════════════════════════════════════
+
+# (conflict_threshold, escalation_threshold)
+_COHERENCE_DEFAULTS: dict[str, "tuple[float, float]"] = {
+    # TF-IDF: intra/inter 모두 conflict ≈ 1.0 포화 → escalation_threshold=1.0 으로
+    # `conflict > 1.0` 절대 False, 사실상 escalation 비활성.
+    "TfidfJLEncoder":  (0.5, 1.0),
+    # EmbeddingBridge (e5-small): intra max=0.124, inter max=0.141 측정 기반.
+    "EmbeddingBridge": (0.105, 0.135),
+    "STAdapter":       (0.105, 0.135),
+}
+
+
+def _default_coherence_thresholds(encoder) -> "tuple[float, float]":
+    """encoder 클래스명 기반 threshold default.
+
+    측정 비교: docs/02-design/features/htp-bridge-integration-design.md §Q2 retune.
+    """
+    return _COHERENCE_DEFAULTS.get(
+        encoder.__class__.__name__,
+        (0.3, 0.7),   # 알려지지 않은 encoder 의 보수적 default
+    )
+
+
+# ══════════════════════════════════════════════════════════
 # Dataclass 정의
 # (KnowledgeEntry 는 types.py 로 이동 — session-1, sub-decision #3)
 # 이 모듈에서 backward-compat 위해 re-export.
@@ -91,13 +123,20 @@ class KnowledgeLoop:
                  store: KnowledgeStore | None = None,
                  conflict_threshold: float = 0.3,
                  resonance_threshold: float = 0.7,
-                 discover_threshold: float = 0.6):
+                 discover_threshold: float = 0.6,
+                 coherence_thresholds: "tuple[float, float] | None" = None):
+        """
+        coherence_thresholds: (conflict, escalation) for CoherenceGate.
+          None 이면 encoder 종류에 맞는 default 자동 선택 (Q2 retune 2026-05-18).
+          명시값은 default 보다 우선.
+        """
         self.encoder = encoder
         self.store   = store or KnowledgeStore.default()
         self.conflict_threshold  = conflict_threshold
         self.resonance_threshold = resonance_threshold
         self.discover_threshold  = discover_threshold
         self._cache: list[KnowledgeEntry] = self.store.load_all()
+        self._coherence_thresholds = coherence_thresholds   # __init__ 후반에 사용
 
         # Critical Gap #3 옵션 A-2: encoder state 영속화.
         # CLI 다중 호출 시 동일 임베딩 공간 보장 — fit 결과를 디스크에 저장/복원.
@@ -111,9 +150,16 @@ class KnowledgeLoop:
         self._rebuild_signatures()
 
         # Bridge Integration §3 (S2): CoherenceGate — ingest 시 정합성 검사.
+        # Q2 retune (2026-05-18): encoder 별 default + override.
+        if self._coherence_thresholds is not None:
+            ct, et = self._coherence_thresholds
+        else:
+            ct, et = _default_coherence_thresholds(self.encoder)
+        self.coherence_conflict_threshold   = ct
+        self.coherence_escalation_threshold = et
         self._coherence = PairwiseCoherenceGate(
-            conflict_threshold   = 0.3,
-            escalation_threshold = 0.7,
+            conflict_threshold   = ct,
+            escalation_threshold = et,
         )
 
         # Bridge Integration §4 (S3): VectorRouter — query 시 source 범위 축소.

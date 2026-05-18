@@ -30,13 +30,23 @@
 
 → design §9 "3개 중 2개 이상 → 가설 지지" **충족**. 시스템 A 의 가치 검증 완료.
 
-### Bridge 후속 cycle 필요 (Q2 미달 대응)
+### Bridge 후속 cycle — Q2 retune **완료** (2026-05-18)
 
-1. **e5-small 전용 threshold 재튜닝** — `conflict_threshold=0.3 / escalation=0.7` 가
-   e5 의 cosine 0.85+ 영역 분포에 너무 엄격. `conflict_threshold ≈ 0.10` 권장.
-   sub-5 의 confidence gap 0.01 threshold 와 동일한 원리 (e5 임베딩 압축 분포).
-2. **TF-IDF 시 escalate 폭주** — TF-IDF + sparse 벡터에서 pair-wise cosine=0 인 경우
-   conflict=1.0 으로 고정됨. encoder 종류별 threshold 다이얼 필요.
+측정 기반 encoder 분기 구현. 모든 항목 해결:
+
+| encoder | 측정 (intra/inter) | retuned threshold | 효과 |
+|---------|------------------|------------------|------|
+| TfidfJLEncoder | 모두 ≈ 1.0 포화 | (0.5, 1.0) | escalation 비활성 — 노이즈 차단 |
+| EmbeddingBridge | intra max=0.124, inter max=0.141 | (0.105, 0.135) | 일관/이질 strict 분리 |
+
+`KnowledgeLoop(coherence_thresholds=(c,e))` 로 override 가능.
+
+**Q2 재검증 결과** (EmbeddingBridge):
+- 이질 conflict=0.153, escalate=**True** ✓
+- 일관 conflict=0.107, escalate=**False** ✓
+- design §9 Q2 strict 기준 충족 — Q1/Q2/Q3 **3/3 PASS**.
+
+테스트 +5 (`test_bridge_q2_retune.py`): encoder default · 미지 encoder fallback · override.
 
 ---
 
