@@ -224,6 +224,49 @@ class KnowledgeLoop:
         return QueryResult(question=question, relevant=relevant,
                            cluster_count=clusters)
 
+    # ── query_v2 (sub-5 merge plan 작업 3 — I5 confidence) ───
+    def query_v2(self, question: str, top_k: int = 5,
+                 gap_threshold: "float | None" = None):
+        """confidence (top-1 vs top-2 gap) 포함 query — 신규.
+
+        반환: QueryResultV2 (results + confidence + has_match).
+
+        gap_threshold: None 이면 DEFAULT_GAP_THRESHOLD (0.005) 사용.
+        """
+        from .confidence import QueryResultV2, ScoredResult, DEFAULT_GAP_THRESHOLD
+
+        if gap_threshold is None:
+            gap_threshold = DEFAULT_GAP_THRESHOLD
+
+        if not self._cache:
+            return QueryResultV2(question=question, results=[],
+                                 confidence=0.0, has_match=False)
+
+        encode_q = getattr(self.encoder, "encode_query", None) or self.encoder.encode
+        q_vec = encode_q(question)
+        neighbors = self._find_neighbors(q_vec, top_k=top_k)
+
+        sims = [n.similarity for n in neighbors]
+        gap, has_match = QueryResultV2.compute_confidence(sims, gap_threshold)
+
+        results = [
+            ScoredResult(
+                entry_id   = self._cache[n.entry_id].id,
+                text       = self._cache[n.entry_id].text,
+                source     = self._cache[n.entry_id].source,
+                similarity = n.similarity,
+                rank       = i + 1,
+            )
+            for i, n in enumerate(neighbors)
+        ]
+
+        return QueryResultV2(
+            question   = question,
+            results    = results,
+            confidence = gap,
+            has_match  = has_match,
+        )
+
     # ── discover ──────────────────────────────────────────
     def discover(self) -> list[Discovery]:
         discoveries: list[Discovery] = []
