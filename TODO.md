@@ -1,10 +1,77 @@
 # HTP — TODO / Handoff
 
-**Last updated**: 2026-05-18 (Bridge Integration 적용)
-**Last commit**: `5c4cb67` + Bridge Integration S1-S4 (한 PDCA cycle 완결)
-**Current state**: **시스템 A↔B 연결 완료** — 가설 검증 PASS (Q1/Q3 ✓, Q2 부분)
+**Last updated**: 2026-05-19 (sub-4 완료 + 외부 리뷰 합의)
+**Last commit**: `8063975` sub-4 외부 리뷰 리포트 (master, push 완료)
+**Current state**: **sub-4 PDCA 종료 (91% Match Rate). 다음 cycle 방향 결정 완료** — LLMRegion ↔ CoherenceGate conflict 해석 연결.
 
 다음 세션에서 이 파일부터 읽고 시작.
+
+---
+
+## 🎯 다음 cycle (1순위) — `htp-conflict-interpretation`
+
+### 핵심 가설
+
+> **CoherenceGate 가 감지한 충돌 (escalate=True) 을 LLMRegion 이 자연어로 해석해
+> 새로운 통찰 가설을 제안한다. 이것이 "창의성의 라이브러리" 의 첫 실제 사례다.**
+
+### 진입 명분
+
+sub-3 (CoherenceGate) + sub-4 (LLMRegion) + Bridge (KnowledgeLoop 통합) 의 3 인프라가
+이미 모두 검증됨. 그러나 분리되어 있어 사용자 가치 미발현. **둘을 합치면 다음:**
+
+```
+현재:
+  $ htp knowledge ingest "주의는 국소적이다" --source 뇌과학
+  ⚠ 충돌 감지 (escalate=True, conflict=0.153) — 끝
+
+목표:
+  $ htp knowledge ingest "주의는 국소적이다" --source 뇌과학
+  ⚠ 충돌 감지 (escalate=True, conflict=0.153)
+  💡 AI 의 "Transformer attention 은 전역적" 과 모순.
+     그러나 scale 차이일 수 있음: 뇌는 뉴런 수준에서 국소적이나
+     영역 간 통신은 전역적. Transformer 도 head 별로는 국소 패턴 학습.
+     → 두 관점 통합 시 "multi-scale attention" 가설 가능.
+```
+
+### 구현 코어
+
+`KnowledgeLoop.ingest()` 의 `_evaluate_coherence()` 결과에서 `escalate=True` 시
+사용자 정의 `LLMRegion` (옵션) 을 호출. 충돌 entries (신규 + top-3 이웃) 를 prompt
+로 구성. CostRouter.select_level 이 여기서 *처음으로 실제 의미*를 가짐 — conflict
+해석은 complexity 높으므로 Level 3-4 선택.
+
+### 작업 분할 (예상)
+
+| Stage | 내용 | 소요 |
+|-------|------|:----:|
+| Plan | escalate=True 발견 시 호출 시점 / prompt 구조 / 비용 정책 결정 | ~30분 |
+| Design | KnowledgeLoop 에 `conflict_interpreter: LLMRegion \| None` DI / Architecture 옵션 | ~30분 |
+| Do | KnowledgeLoop.ingest + LLMRegion 통합 + prompt template + CLI 출력 | ~1.5h |
+| Check | 실데이터 시나리오 검증 (이질 ingest → 해석 품질 평가) | ~30분 |
+| 합계 | | **~3h** |
+
+### 진입 전 결정 필요 (Plan 단계)
+
+1. **충돌 해석 호출 시점**: ingest 시 동기 (즉시 출력) vs 비동기 (이후 query 시 조회)?
+2. **Mock 모드 default**: 데모/테스트 시 API 키 없이 작동해야 함. CLI flag `--mock-llm`?
+3. **호출 빈도 제한**: escalate 가 많아지면 비용 폭증. CostRouter pressure threshold 로 cap?
+4. **해석 결과 저장 위치**: KnowledgeEntry 의 새 필드 vs 별도 store?
+
+---
+
+## ⏸️ 후순위 (실 필요 발생 시)
+
+| 항목 | 사유 |
+|------|------|
+| **SearchRegion / RAGRegion 확장** | ExternalRegion 추상의 다양성 검증은 가치 있으나, "만들 수 있으니까 만들자" 는 인프라 정비의 늪. 실 사용처가 생기면 진행 |
+| **sub-6 vector default 전환** (`routing_mode = "vector"`) | 사용자 체감 0. hybrid 모드가 잘 작동 중. 급할 이유 없음 |
+| **CostRouter.select_level 임계값 튜닝** | 실 호출 데이터 부재. 연결 4 완료 후 데이터 수집되면 그때 |
+| **C-4 graphify 정량 측정** | 30분 작업이나 sub-4 다음 cycle 중 끼워 진행 (별도 cycle 불필요) |
+
+---
+
+## 🌉 Bridge Integration (완료)
 
 ---
 
@@ -70,32 +137,18 @@ C-4 (graphify isolated 50% 감소) — **△ 정량 측정 후속 cycle**.
 
 ---
 
-## ⏭️ 즉시 진입 가능한 다음 작업
+## 📚 KnowledgeLoop UX 폴리시 후속 (별도 micro-cycle, 후순위)
 
-### A. sub-4 본선 진입 (Stage 4 + 5)
+sub-5 시나리오 D + Vault 실사용 발견 4건. 연결 4 (LLMRegion 해석) 이후 의미 있음:
 
-`htp-thalamus-car` plan §5 의 남은 본선 작업:
-- **Stage 4**: ExternalRegion + LLMRegion 리팩토링
-- **Stage 5**: PipelinedBrainRuntime
+| ID | 항목 | 소요 |
+|----|------|:----:|
+| I3 | relative ranking (top-k 내 min-max normalize) | 1-2h |
+| I1 | recursive glob (서브디렉토리 ingest, `**/*.md` 기본화) | 30분 |
+| I4 | Obsidian frontmatter tags 추출 → entry.tags 자동 매핑 | 1-2h |
+| I2 | frontmatter strip (list/query preview 의 본문 우선 표시) | 1h |
 
-```bash
-/pdca design htp-thalamus-car   # sub-4 scope
-```
-
-목표: 누적 197 → 210 (Plan §5 명시 89 + L2/sub-5 누적 가산)
-
-### B. 후속 micro-cycle 5건 (sub-5 발견 사항)
-
-merge plan §7 + 시나리오 D 발견 후속:
-
-| 우선순위 | ID | 항목 | 소요 |
-|:--:|----|------|:----:|
-| 2 | **I3** | relative ranking (top-k 내 min-max normalize) | 1-2h |
-| 3 | **I1** | recursive glob (서브디렉토리 ingest, `**/*.md` 기본화) | 30분 |
-| 3 | **I4** | Obsidian frontmatter tags 추출 → entry.tags 자동 매핑 | 1-2h |
-| 4 | **I2** | frontmatter strip (list/query preview 의 본문 우선 표시) | 1h |
-
-→ 4건 묶음 `htp-knowledge-ux-polish` (3-4h) 또는 개별 cycle.
+→ `htp-knowledge-ux-polish` 묶음 (3-4h).
 
 ---
 

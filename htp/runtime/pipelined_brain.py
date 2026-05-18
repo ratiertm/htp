@@ -60,6 +60,17 @@ class PipelinedBrainRuntime(AsyncBrainRuntime):
         S2/S3 (Thalamus + PFC) 은 input-순서 serialize 하여 state 일관성 보존.
 
         Plan Stage 5 throughput 목표 1.5× 는 N ≥ buffer_size × 2 시 의미 있음.
+
+        **제약 — 입력 독립성 가정 (sub-4 Report §6 외부 리뷰 합의)**:
+          pipelined_arun 은 입력들이 서로 *기억 의존이 없는* 시나리오 가정.
+          S1 stage 가 buffer_size 만큼 동시 실행되므로 입력 N+1 의 Region.arun
+          이 입력 N 의 PFC 결과 / Memory 상태를 보기 전에 시작될 수 있다.
+
+          순차 기억 의존이 필요한 시나리오 (예: 입력 N+1 이 입력 N 의 결과를 회상해
+          사용) 는 super().arun() (AsyncBrainRuntime) 을 N 번 호출하는 순차 모드 사용.
+
+          batch 분석, 독립 query 다발 처리 같은 read-only 또는 stateless 시나리오에서
+          사용. 입력 간 인과 관계가 필요하면 sequential.
         """
         if not inputs:
             return []
