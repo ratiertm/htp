@@ -1,0 +1,110 @@
+{
+  "S1_interp_offdiag": {
+    "min": 0.8239536285400391,
+    "mean": 0.8611281474431356,
+    "max": 0.8941667079925537
+  },
+  "S2": {
+    "tp": [
+      0.8201050758361816,
+      0.8323794603347778
+    ],
+    "hard": [
+      0.8147324323654175,
+      0.8426618576049805,
+      0.833417534828186,
+      0.8321454524993896,
+      0.8407549858093262,
+      0.8445216417312622
+    ],
+    "separation": -0.024416565895080566,
+    "margin_mean": -0.008463382720947266
+  },
+  "verdict": "분리 실패 — 공간 문제 확정 (e5-small 분해능 한계)",
+  "rows": [
+    {
+      "kind": "HARD_NEG",
+      "probe": "Redis cluster 샤딩 hash slot 재분배 리밸런싱",
+      "best_c": 0.8147,
+      "best_is_intended": false
+    },
+    {
+      "kind": "HARD_NEG",
+      "probe": "Transformer KV cache 메모리 추론 최적화",
+      "best_c": 0.8427,
+      "best_is_intended": false
+    },
+    {
+      "kind": "HARD_NEG",
+      "probe": "거래소 settlement T+2 청산 결제 리스크",
+      "best_c": 0.8334,
+      "best_is_intended": false
+    },
+    {
+      "kind": "HARD_NEG",
+      "probe": "PostgreSQL VACUUM 디스크 공간 회수 autovacuum",
+      "best_c": 0.8321,
+      "best_is_intended": true
+    },
+    {
+      "kind": "HARD_NEG",
+      "probe": "GABA 억제성 시냅스 lateral inhibition",
+      "best_c": 0.8408,
+      "best_is_intended": true
+    },
+    {
+      "kind": "HARD_NEG",
+      "probe": "RNN 순환 게이트 LSTM forget gate 시계열",
+      "best_c": 0.8445,
+      "best_is_intended": false
+    },
+    {
+      "kind": "MID_NEG",
+      "probe": "Kafka consumer group partition rebalance",
+      "best_c": 0.8254,
+      "best_is_intended": false
+    },
+    {
+      "kind": "MID_NEG",
+      "probe": "RLHF 인간 피드백 보상 모델 정렬",
+      "best_c": 0.8371,
+      "best_is_intended": false
+    },
+    {
+      "kind": "MID_NEG",
+      "probe": "옵션 implied volatility 변동성 스마일",
+      "best_c": 0.8624,
+      "best_is_intended": false
+    },
+    {
+      "kind": "MID_NEG",
+      "probe": "Raft 합의 알고리즘 leader election",
+      "best_c": 0.8296,
+      "best_is_intended": true
+    },
+    {
+      "kind": "EASY_NEG",
+      "probe": "중세 고딕 성당 부벽 구조 하중 분산",
+      "best_c": 0.7861,
+      "best_is_intended": false
+    },
+    {
+      "kind": "EASY_NEG",
+      "probe": "김치 발효 유산균 pH 변화 숙성",
+      "best_c": 0.8238,
+      "best_is_intended": true
+    },
+    {
+      "kind": "TRUE_POS",
+      "probe": "메모리 캐시에서 오래된 항목 제거하는 LRU 축출 정책",
+      "best_c": 0.8201,
+      "best_is_intended": true
+    },
+    {
+      "kind": "TRUE_POS",
+      "probe": "셀프 어텐션이 모든 토큰 쌍을 동시에 가중하는 전역 연산",
+      "best_c": 0.8324,
+      "best_is_intended": true
+    }
+  ]
+}
