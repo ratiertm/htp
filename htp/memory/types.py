@@ -46,7 +46,7 @@ class Episode:
     winner:       str = ""                       # 이긴 Region 이름
     action_type:  str = ""                       # "execute" | "inhibit"
     score:        float = 0.0                    # PFC combined score (reward)
-    state_vec:    bytes = b""                    # 64-dim float32 blob
+    state_vec:    bytes = b""                    # 64-dim float32 blob (또는 384 for embedding)
     context:      str = ""                       # 입력 요약 50자
     outcome:      Optional[str] = None           # 사후 "success"/"fail"
     recall_count: int = 0                        # CA1 재활성화 횟수
@@ -54,6 +54,9 @@ class Episode:
     swr_tagged:   bool = False                   # consolidation 대상 여부
     session_id:   str = ""
     timestamp:    float = field(default_factory=time.time)
+    # htp-conflict-memory (2026-05-19): LLM 충돌 해석 본문.
+    # winner="conflict_interpreter" Episode 에 한해 채워짐. 다른 Episode 는 "".
+    interpretation_text: str = ""
 
 
 @dataclass

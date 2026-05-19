@@ -51,9 +51,19 @@ def _do_ingest_single(args, text: str) -> int:
             print(f"  ⚠ 충돌 감지 (coherence={ci['coherence']:.2f}, "
                   f"conflict={ci['conflict']:.2f})")
             print(f"     → 기존 지식과 모순될 수 있음")
-            # htp-conflict-interpretation §1: LLM 자연어 해석 출력
+            # htp-conflict-memory: recall 먼저 노출 (이전 비슷한 충돌)
+            rh = result.recall_hint
+            if rh:
+                print(f"  📚 이전 유사 충돌 "
+                      f"(mismatch={rh['mismatch']:.2f}, quality={rh['quality']:.2f}):")
+                print(f"     trigger: {rh['prev_trigger']}")
+                print(f"     해석: {rh['prev_interpretation'][:180]}"
+                      f"{'...' if len(rh['prev_interpretation']) > 180 else ''}")
+            # htp-conflict-interpretation §1: 새 LLM 해석
             if result.entry.interpretation:
-                print(f"  💡 해석: {result.entry.interpretation}")
+                preview = result.entry.interpretation[:180]
+                suffix  = "..." if len(result.entry.interpretation) > 180 else ""
+                print(f"  💡 새 해석: {preview}{suffix}")
         else:
             print(f"  ✓ 정합성 양호 (coherence={ci['coherence']:.2f})")
     return 0

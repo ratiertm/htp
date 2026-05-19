@@ -31,6 +31,10 @@ from htp.thalamus.region_signal import RegionSignal
 from htp.llm.llm_region   import LLMRegion
 from .conflict_prompt     import SYSTEM_PROMPT, build_conflict_prompt
 
+# htp-conflict-memory (2026-05-19): conflict interpretation → Episode → recall.
+# DAG: knowledge → memory 단방향 신규 허용 (Bridge §6 와 동일 패턴, design §3).
+from htp.memory.memory_system import MemorySystem
+
 
 # ══════════════════════════════════════════════════════════
 # Q2 retune (2026-05-18): encoder 별 CoherenceGate threshold default.
@@ -83,6 +87,7 @@ class IngestResult:
     conflicts: list
     resonances: list
     coherence_info: "dict | None" = None   # Bridge §3 (S2): {coherence, conflict, escalate}
+    recall_hint:    "dict | None" = None   # htp-conflict-memory: 이전 비슷한 충돌
 
 
 @dataclass
@@ -131,7 +136,8 @@ class KnowledgeLoop:
                  discover_threshold: float = 0.6,
                  coherence_thresholds: "tuple[float, float] | None" = None,
                  conflict_interpreter: "LLMRegion | None" = None,
-                 max_interpretations: int = 20):
+                 max_interpretations: int = 20,
+                 memory: "MemorySystem | None" = None):
         """
         coherence_thresholds: (conflict, escalation) for CoherenceGate.
           None 이면 encoder 종류에 맞는 default 자동 선택 (Q2 retune 2026-05-18).
@@ -161,6 +167,13 @@ class KnowledgeLoop:
         self.conflict_interpreter   = conflict_interpreter
         self.max_interpretations    = max_interpretations
         self._interpretations_count = 0
+
+        # htp-conflict-memory: Architecture B (Auto-create default).
+        # None 이면 자동 MemorySystem 생성. store 와 같은 부모 dir 아래 memory/ 사용.
+        if memory is None:
+            memory_dir = self.store.path.parent / "memory"
+            memory = MemorySystem(memory_dir=memory_dir)
+        self.memory = memory
 
         # Critical Gap #3 옵션 A-2: encoder state 영속화.
         # CLI 다중 호출 시 동일 임베딩 공간 보장 — fit 결과를 디스크에 저장/복원.
@@ -236,10 +249,22 @@ class KnowledgeLoop:
         # Bridge Integration §3 (S2): CoherenceGate — 새 vec + 상위 이웃 정합성 측정.
         coherence_info = self._evaluate_coherence(vec, source, neighbors)
 
+        # htp-conflict-memory: escalate=True 시 *먼저* recall (이전 비슷한 충돌 검색).
+        recall_hint = None
+        if coherence_info and coherence_info.get("escalate"):
+            recall_hint = self._try_recall_conflict(vec)
+
         # htp-conflict-interpretation §1 데이터흐름: escalate=True 시 LLM 해석.
         interpretation = self._maybe_interpret_conflict(
             text, source, neighbors, coherence_info,
         )
+
+        # htp-conflict-memory: 새 interpretation 을 Episode 로 저장.
+        if interpretation:
+            conflict_val = (coherence_info or {}).get("conflict", 0.0)
+            self._save_conflict_episode(
+                vec, text, neighbors, interpretation, conflict_val,
+            )
 
         entry = KnowledgeEntry(
             text=text, vec=vec, source=source,
@@ -253,7 +278,8 @@ class KnowledgeLoop:
 
         return IngestResult(entry=entry, neighbors=neighbors,
                             conflicts=conflicts, resonances=resonances,
-                            coherence_info=coherence_info)
+                            coherence_info=coherence_info,
+                            recall_hint=recall_hint)
 
     # ── Bridge Integration §3 (S2) — CoherenceGate ────────
     def _evaluate_coherence(
@@ -347,6 +373,89 @@ class KnowledgeLoop:
                 or str(result)
             )
         return str(result)
+
+    # ── htp-conflict-memory (2026-05-19) — recall + save ──
+    def _try_recall_conflict(self, query_vec: np.ndarray) -> "dict | None":
+        """이전 비슷한 conflict interpretation 검색.
+
+        Returns dict {prev_interpretation, prev_trigger, mismatch, quality,
+                      episode_id} 또는 None (저장된 이전 충돌 없음 또는 mismatch 큼).
+        """
+        if self.memory is None:
+            return None
+        import torch
+        # encoder 가 384-dim 같은 임베딩 사용 시 query_vec 도 같은 dim
+        qv = torch.tensor(query_vec, dtype=torch.float32)
+        results = self.memory.recall_conflict(qv, top_k=3)
+        if not results:
+            return None
+
+        # 양적 검증 결과: quality 내림차순으로 정렬됨. 첫 후보 검토.
+        best_ep, best_quality = results[0]
+
+        # mismatch 계산 — state_vec bytes → tensor
+        import struct
+        if not best_ep.state_vec:
+            return None
+        n = len(best_ep.state_vec) // 4
+        prev_floats = struct.unpack(f"{n}f", best_ep.state_vec)
+        prev_vec = torch.tensor(prev_floats, dtype=torch.float32)
+        if prev_vec.shape != qv.shape:
+            return None      # dim 불일치 (legacy episode)
+        mismatch = float((qv - prev_vec).norm())
+
+        if mismatch >= self.memory.CONFLICT_RECALL_MISMATCH_THRESHOLD:
+            return None
+        return {
+            "prev_interpretation": best_ep.interpretation_text,
+            "prev_trigger":        best_ep.context,
+            "mismatch":            mismatch,
+            "quality":             best_quality,
+            "episode_id":          best_ep.episode_id,
+        }
+
+    # interpretation 이 timeout / error / blocked 면 저장 skip.
+    # quality 0 의 노이즈 episode 누적 방지.
+    _INTERPRETATION_SKIP_MARKERS = (
+        "claude cli timeout",
+        "claude cli rc=",
+        "claude CLI not in PATH",
+        "interpretation failed:",
+        "cost_blocked",
+    )
+
+    def _save_conflict_episode(
+        self,
+        vec:            np.ndarray,
+        text:           str,
+        neighbors:      "list[Neighbor]",
+        interpretation: str,
+        conflict_value: float,
+    ) -> None:
+        """LLM 이 생성한 interpretation 을 Episode 로 저장.
+
+        state_vec = text 임베딩 (trigger vec) — 다음 비슷한 *input* 이 들어오면
+        이 vec 유사도로 이전 해석 recall.
+
+        timeout / error 응답은 저장 skip (quality 0 노이즈 방지).
+        """
+        if self.memory is None or not interpretation:
+            return
+        # 의미 없는 응답 (timeout / error / blocked) 은 저장 skip
+        low = interpretation.lower()
+        if any(m in low for m in self._INTERPRETATION_SKIP_MARKERS):
+            return
+        import torch
+        partner_texts = [self._cache[n.entry_id].text for n in neighbors[:3]]
+        # text vec 을 trigger 로 — 다음 비슷한 ingest 가 들어왔을 때 recall key
+        trigger_vec = torch.tensor(vec, dtype=torch.float32)
+        self.memory.save_conflict(
+            trigger_vec    = trigger_vec,
+            new_text       = text,
+            partner_texts  = partner_texts,
+            interpretation = interpretation,
+            conflict_score = float(conflict_value),
+        )
 
     # ── batch ingest (L2 sidequest F1) ────────────────────
     def ingest_batch(self, texts: list[str], source: str = ""

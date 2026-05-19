@@ -132,6 +132,85 @@ class MemorySystem:
             is_novel       = is_novel,
         )
 
+    # ── htp-conflict-memory (2026-05-19) — conflict 전용 wrapper ──
+
+    # 실 시연 발견 (2026-05-19): CA1 default 0.3 은 64-dim sparse 기준.
+    # 384-dim e5 dense vec 에서 일반 cosine ~0.85 → L2 ~0.55 → 0.3 미통과.
+    # 0.6 로 완화 (cosine ~0.82 ↔ "비슷한 도메인 충돌" 수준).
+    # 후속 cycle 에서 encoder.dim 기반 자동 조정 가능 (Plan §6 Risk 항목).
+    CONFLICT_RECALL_MISMATCH_THRESHOLD = 0.6
+
+    def save_conflict(
+        self,
+        trigger_vec:    torch.Tensor,
+        new_text:       str,
+        partner_texts:  "list[str]",
+        interpretation: str,
+        conflict_score: float = 0.0,
+    ) -> str:
+        """LLM conflict interpretation 을 Episode 로 저장.
+
+        Design Ref: docs/02-design/features/htp-conflict-memory.design.md §2 M4
+        (2026-05-19 수정: state_vec = trigger_vec — text 임베딩이 recall key.
+        다음 비슷한 *input* 이 들어오면 이전 해석 recall 하는 게 자연스러움.
+        interpretation 임베딩 사용 시 cross-lingual 등 문제로 매칭 실패.)
+
+        - state_vec = trigger_vec (text 임베딩 — recall key)
+        - context   = new_text[:25] + partners[:2] 요약 (50자 cap)
+        - winner    = fixed "conflict_interpreter"
+        - interpretation_text = 전체 본문 (recall 시 노출용)
+
+        quality_hint 는 _quality_by_episode in-memory dict 에 저장.
+        """
+        from .quality_hint import quality_hint as _q
+
+        # context — trigger + partners 요약 (50자 cap, design §2 M4)
+        partner_summary = " / ".join(p[:15] for p in partner_texts[:2])
+        context_str = f"{new_text[:25]} ↔ {partner_summary}"[:50]
+
+        ep = Episode(
+            step                = 0,
+            winner              = "conflict_interpreter",
+            action_type         = "interpret",
+            score               = float(conflict_score),
+            state_vec           = tensor_to_bytes(trigger_vec),
+            context             = context_str,
+            novelty             = 1.0,
+            session_id          = self.session_id,
+            interpretation_text = interpretation,
+        )
+        ep_id = self.l2.save(ep)
+
+        # quality_hint 누적 (lazy 초기화)
+        if not hasattr(self, "_quality_by_episode"):
+            self._quality_by_episode: dict[str, float] = {}
+        self._quality_by_episode[ep_id] = _q(interpretation)
+        return ep_id
+
+    def recall_conflict(
+        self,
+        query_vec: torch.Tensor,
+        top_k:     int = 3,
+    ) -> "list[tuple[Episode, float]]":
+        """이전 conflict interpretation 들 중 query_vec 과 가장 유사한 N개.
+
+        Returns
+        -------
+        list[(Episode, quality_hint)] — quality 내림차순.
+        candidates 없으면 빈 list.
+        """
+        candidates = self.l2.search_similar(
+            query_vec, top_k=top_k,
+            winner_filter="conflict_interpreter",
+        )
+        if not candidates:
+            return []
+        qmap = getattr(self, "_quality_by_episode", {})
+        scored = [(ep, qmap.get(ep.episode_id, 0.0)) for ep in candidates]
+        # 1차 quality 내림차순. 동률은 입력 cosine 순서 유지.
+        scored.sort(key=lambda x: -x[1])
+        return scored
+
     # ── CUSUM overload → consolidation ──────────
 
     def on_overload(self, region_id: str):

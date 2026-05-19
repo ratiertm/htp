@@ -1,8 +1,27 @@
 # HTP — TODO / Handoff
 
-**Last updated**: 2026-05-19 (htp-conflict-interpretation 완료)
+**Last updated**: 2026-05-20 (htp-conflict-memory 완료)
 **Last commit**: TBD (push 직전)
-**Current state**: **htp-conflict-interpretation PDCA 종료 (96% Match Rate)** — sub-3 × sub-4 × Bridge 의 곱이 사용자 가치로 발현.
+**Current state**: **htp-conflict-memory PDCA 종료 (100% Match Rate)** — "충돌 발견 → 해석 → 기억 → 재활용" 완전 루프. 창의성의 라이브러리 정의 완성.
+
+---
+
+## ✅ htp-conflict-memory (완료, 2026-05-20)
+
+**Match Rate 100%** — 6/6 SC strict PASS. `docs/04-report/htp-conflict-memory.report.md`.
+
+핵심 시연 (v4 — warm-up + Redis + Kubernetes):
+- 1회차 Redis ingest → escalate=True → LLM 해석 → **Episode 저장 (state_vec=trigger 임베딩)**
+- 2회차 Kubernetes ingest → **📚 RECALL HIT ✓** (mismatch=0.530 < 0.6)
+- 이전 해석 즉시 노출 + 새 LLM 해석이 더 정밀 비교 추가
+
+발견 + Fix (2 bugs):
+1. recall key 불일치 — save 시 `interpretation_vec` vs recall 시 `text_vec` → `trigger_vec` 통일
+2. threshold 너무 엄격 — 0.3 (64-dim sparse 기준) → 0.6 (384-dim e5 기준)
+
+회귀 283 → 303 PASS (+20).
+
+---
 
 다음 세션에서 이 파일부터 읽고 시작.
 

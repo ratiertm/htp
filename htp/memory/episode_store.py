@@ -19,19 +19,20 @@ from .types import Episode, bytes_to_tensor
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS episodes (
-    episode_id   TEXT PRIMARY KEY,
-    step         INTEGER,
-    winner       TEXT,
-    action_type  TEXT,
-    score        REAL,
-    state_vec    BLOB,
-    context      TEXT,
-    outcome      TEXT,
-    recall_count INTEGER DEFAULT 0,
-    novelty      REAL    DEFAULT 1.0,
-    swr_tagged   INTEGER DEFAULT 0,
-    session_id   TEXT,
-    timestamp    REAL
+    episode_id          TEXT PRIMARY KEY,
+    step                INTEGER,
+    winner              TEXT,
+    action_type         TEXT,
+    score               REAL,
+    state_vec           BLOB,
+    context             TEXT,
+    outcome             TEXT,
+    recall_count        INTEGER DEFAULT 0,
+    novelty             REAL    DEFAULT 1.0,
+    swr_tagged          INTEGER DEFAULT 0,
+    session_id          TEXT,
+    timestamp           REAL,
+    interpretation_text TEXT    DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_winner    ON episodes(winner);
 CREATE INDEX IF NOT EXISTS idx_swr       ON episodes(swr_tagged);
@@ -50,19 +51,33 @@ class EpisodeStore:
         self._conn.executescript(SCHEMA)
         # async 환경 대비 WAL 모드
         self._conn.execute("PRAGMA journal_mode=WAL")
+        # htp-conflict-memory (2026-05-19): 기존 DB 마이그레이션.
+        # interpretation_text 컬럼 존재 확인 후 idempotent ALTER.
+        cols = [r[1] for r in self._conn.execute("PRAGMA table_info(episodes)")]
+        if "interpretation_text" not in cols:
+            self._conn.execute(
+                "ALTER TABLE episodes ADD COLUMN interpretation_text TEXT DEFAULT ''"
+            )
+            self._conn.commit()
 
     # ── 저장 ─────────────────────────────────────
 
     def save(self, ep: Episode) -> str:
         if not ep.episode_id:
             ep.episode_id = str(uuid.uuid4())
+        # 14 columns (interpretation_text 추가)
         self._conn.execute("""
-            INSERT OR REPLACE INTO episodes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            INSERT OR REPLACE INTO episodes
+            (episode_id, step, winner, action_type, score, state_vec,
+             context, outcome, recall_count, novelty, swr_tagged,
+             session_id, timestamp, interpretation_text)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             ep.episode_id, ep.step, ep.winner, ep.action_type,
             ep.score, ep.state_vec, ep.context, ep.outcome,
             ep.recall_count, ep.novelty, int(ep.swr_tagged),
             ep.session_id, ep.timestamp,
+            ep.interpretation_text,
         ))
         self._conn.commit()
         return ep.episode_id
@@ -176,10 +191,13 @@ class EpisodeStore:
 
     @staticmethod
     def _row_to_episode(row) -> Episode:
+        # htp-conflict-memory: interpretation_text (row[13]) — legacy row 는 14열 미만
+        interpretation = row[13] if len(row) > 13 else ""
         return Episode(
             episode_id=row[0], step=row[1], winner=row[2],
             action_type=row[3], score=row[4], state_vec=row[5],
             context=row[6], outcome=row[7], recall_count=row[8] or 0,
             novelty=row[9] or 1.0, swr_tagged=bool(row[10]),
             session_id=row[11] or "", timestamp=row[12] or 0.0,
+            interpretation_text=interpretation or "",
         )

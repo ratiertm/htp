@@ -89,12 +89,15 @@ def test_core_file_does_not_import_runtime(py_file: pathlib.Path):
 def test_knowledge_file_dag_isolation(py_file: pathlib.Path):
     """htp/knowledge/<file>.py (+ cli/ 하위) 의 단방향 DAG.
 
-    Bridge Integration §6: thalamus 는 허용 (단방향), runtime/memory 는 금지.
+    Bridge Integration §6: thalamus 는 허용 (단방향).
+    htp-conflict-memory §3 (2026-05-19): memory 도 허용 (단방향).
+    runtime 만 금지 — htp/llm 은 knowledge → llm 단방향 이미 허용.
+    역방향 (thalamus/memory → knowledge) 은 별도 룰에서 영구 금지.
     """
     from_mods = _from_modules(py_file)
     direct    = _direct_imports(py_file)
 
-    forbidden = ("htp.runtime", "htp.memory")
+    forbidden = ("htp.runtime",)
     violations = [
         m for m in from_mods + direct
         if m and any(f in m for f in forbidden)
@@ -102,7 +105,7 @@ def test_knowledge_file_dag_isolation(py_file: pathlib.Path):
     rel = py_file.relative_to(_KNOWLEDGE_DIR.parent)
     assert not violations, (
         f"DAG violation in {rel}: {violations}\n"
-        f"htp/knowledge/* 는 htp.runtime/memory 미참조 (thalamus 는 Bridge §6 로 허용)"
+        f"htp/knowledge/* 는 htp.runtime 미참조 (thalamus/memory 는 단방향 허용)"
     )
 
 
@@ -133,6 +136,36 @@ def test_thalamus_does_not_import_knowledge(py_file: pathlib.Path):
     assert not violations, (
         f"역방향 DAG violation in {rel}: {violations}\n"
         f"htp/thalamus/* 는 htp.knowledge 를 import 할 수 없음 (Bridge §6)"
+    )
+
+
+# ══════════════════════════════════════════════════════════
+# DAG 규칙 (htp-conflict-memory §3):
+# htp/memory/* 는 htp.knowledge 미참조 — 역방향 영구 금지.
+# 시스템 분리 보존 (Memory 는 BrainRuntime 의 base layer).
+# Design Ref: htp-conflict-memory.design.md §3
+# ══════════════════════════════════════════════════════════
+
+_MEMORY_DIR = _PROJECT_ROOT / "htp" / "memory"
+
+
+@pytest.mark.parametrize("py_file", [
+    p for p in _MEMORY_DIR.rglob("*.py")
+    if p.name != "__init__.py"
+] if _MEMORY_DIR.exists() else [])
+def test_memory_does_not_import_knowledge(py_file: pathlib.Path):
+    """htp-conflict-memory §3: htp/memory/* 어디에서도 htp.knowledge 참조 금지."""
+    from_mods = _from_modules(py_file)
+    direct    = _direct_imports(py_file)
+
+    violations = [
+        m for m in from_mods + direct
+        if m and "htp.knowledge" in m
+    ]
+    rel = py_file.relative_to(_MEMORY_DIR.parent)
+    assert not violations, (
+        f"역방향 DAG violation in {rel}: {violations}\n"
+        f"htp/memory/* 는 htp.knowledge 를 import 할 수 없음 (knowledge → memory 단방향)"
     )
 
 
