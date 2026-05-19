@@ -1,0 +1,294 @@
+{
+  "model": "BAAI/bge-m3",
+  "dim": 1024,
+  "dist_cut": 0.6241160750389099,
+  "MARGIN": 0.05,
+  "PERCENTILE": 95,
+  "calib": {
+    "set": "calib",
+    "tp_recall": null,
+    "tp": "0/0",
+    "hard_fp_rate": 0.16666666666666666,
+    "hard_fp": "1/6",
+    "mid_fp": "0/2",
+    "easy_fp": "0/1"
+  },
+  "eval": {
+    "set": "eval",
+    "tp_recall": 0.2,
+    "tp": "2/10",
+    "hard_fp_rate": 0.0,
+    "hard_fp": "0/6",
+    "mid_fp": "0/2",
+    "easy_fp": "0/1"
+  },
+  "fp_gap": -0.16666666666666666,
+  "verdict": "대",
+  "explain": "in-sample PASS 가 과적합이었음. 비-임베딩 키 신설.",
+  "calib_rows": [
+    {
+      "kind": "HARD_NEG",
+      "split": "calib",
+      "probe": "Redis cluster 샤딩 hash slot 재분배 리밸런싱",
+      "c1": 0.6128,
+      "gap": 0.0616,
+      "hit": false
+    },
+    {
+      "kind": "HARD_NEG",
+      "split": "calib",
+      "probe": "Transformer KV cache 메모리 추론 최적화",
+      "c1": 0.6317,
+      "gap": 0.0559,
+      "hit": true
+    },
+    {
+      "kind": "HARD_NEG",
+      "split": "calib",
+      "probe": "거래소 settlement T+2 청산 결제 리스크",
+      "c1": 0.5419,
+      "gap": 0.0365,
+      "hit": false
+    },
+    {
+      "kind": "HARD_NEG",
+      "split": "calib",
+      "probe": "PostgreSQL VACUUM 디스크 공간 회수 autovacuum",
+      "c1": 0.5304,
+      "gap": 0.0389,
+      "hit": false
+    },
+    {
+      "kind": "HARD_NEG",
+      "split": "calib",
+      "probe": "GABA 억제성 시냅스 lateral inhibition",
+      "c1": 0.5824,
+      "gap": 0.0116,
+      "hit": false
+    },
+    {
+      "kind": "HARD_NEG",
+      "split": "calib",
+      "probe": "RNN 순환 게이트 LSTM forget gate 시계열",
+      "c1": 0.5217,
+      "gap": 0.0137,
+      "hit": false
+    },
+    {
+      "kind": "MID_NEG",
+      "split": "calib",
+      "probe": "Kafka consumer group partition rebalance",
+      "c1": 0.5173,
+      "gap": 0.0044,
+      "hit": false
+    },
+    {
+      "kind": "MID_NEG",
+      "split": "calib",
+      "probe": "RLHF 인간 피드백 보상 모델 정렬",
+      "c1": 0.5287,
+      "gap": 0.0016,
+      "hit": false
+    },
+    {
+      "kind": "EASY_NEG",
+      "split": "calib",
+      "probe": "중세 고딕 성당 부벽 구조 하중 분산",
+      "c1": 0.5109,
+      "gap": 0.0033,
+      "hit": false
+    }
+  ],
+  "eval_rows": [
+    {
+      "kind": "HARD_NEG",
+      "split": "eval",
+      "probe": "Redis pub sub channel subscribe 비동기 메시징",
+      "c1": 0.5386,
+      "gap": 0.0026,
+      "hit": false,
+      "intended": 0,
+      "best_anchor": 1
+    },
+    {
+      "kind": "HARD_NEG",
+      "split": "eval",
+      "probe": "Transformer positional encoding sinusoidal 위치 인코딩",
+      "c1": 0.5793,
+      "gap": 0.0596,
+      "hit": false,
+      "intended": 1,
+      "best_anchor": 1
+    },
+    {
+      "kind": "HARD_NEG",
+      "split": "eval",
+      "probe": "거래소 마진콜 강제청산 leverage 위험",
+      "c1": 0.5587,
+      "gap": 0.0046,
+      "hit": false,
+      "intended": 2,
+      "best_anchor": 0
+    },
+    {
+      "kind": "HARD_NEG",
+      "split": "eval",
+      "probe": "PostgreSQL btree index 빠른 검색 색인",
+      "c1": 0.5272,
+      "gap": 0.055,
+      "hit": false,
+      "intended": 3,
+      "best_anchor": 3
+    },
+    {
+      "kind": "HARD_NEG",
+      "split": "eval",
+      "probe": "노르아드레날린 각성 주의 attention modulation",
+      "c1": 0.6124,
+      "gap": 0.0567,
+      "hit": false,
+      "intended": 4,
+      "best_anchor": 1
+    },
+    {
+      "kind": "HARD_NEG",
+      "split": "eval",
+      "probe": "Batch Normalization layer 정규화 학습 안정화",
+      "c1": 0.5201,
+      "gap": 0.0196,
+      "hit": false,
+      "intended": 5,
+      "best_anchor": 1
+    },
+    {
+      "kind": "MID_NEG",
+      "split": "eval",
+      "probe": "옵션 implied volatility 변동성 스마일",
+      "c1": 0.5507,
+      "gap": 0.0285,
+      "hit": false,
+      "intended": 2,
+      "best_anchor": 2
+    },
+    {
+      "kind": "MID_NEG",
+      "split": "eval",
+      "probe": "Raft 합의 알고리즘 leader election",
+      "c1": 0.4999,
+      "gap": 0.005,
+      "hit": false,
+      "intended": 3,
+      "best_anchor": 0
+    },
+    {
+      "kind": "EASY_NEG",
+      "split": "eval",
+      "probe": "김치 발효 유산균 pH 변화 숙성",
+      "c1": 0.4893,
+      "gap": 0.0173,
+      "hit": false,
+      "intended": 3,
+      "best_anchor": 5
+    },
+    {
+      "kind": "TRUE_POS",
+      "split": "eval",
+      "probe": "메모리 캐시에서 오래된 항목 제거하는 LRU 축출 정책",
+      "c1": 0.762,
+      "gap": 0.281,
+      "hit": true,
+      "intended": 0,
+      "best_anchor": 0
+    },
+    {
+      "kind": "TRUE_POS",
+      "split": "eval",
+      "probe": "OS 페이지 교체 알고리즘 clock sweep 오래된 페이지 제거",
+      "c1": 0.5447,
+      "gap": 0.0332,
+      "hit": false,
+      "intended": 0,
+      "best_anchor": 0
+    },
+    {
+      "kind": "TRUE_POS",
+      "split": "eval",
+      "probe": "CDN 엣지 캐시 만료 정책 stale content 추출",
+      "c1": 0.5643,
+      "gap": 0.0775,
+      "hit": false,
+      "intended": 0,
+      "best_anchor": 0
+    },
+    {
+      "kind": "TRUE_POS",
+      "split": "eval",
+      "probe": "셀프 어텐션이 모든 토큰 쌍을 동시에 가중하는 전역 연산",
+      "c1": 0.6614,
+      "gap": 0.1088,
+      "hit": true,
+      "intended": 1,
+      "best_anchor": 1
+    },
+    {
+      "kind": "TRUE_POS",
+      "split": "eval",
+      "probe": "그래프 신경망 message passing 전체 노드 동시 갱신",
+      "c1": 0.5423,
+      "gap": 0.0095,
+      "hit": false,
+      "intended": 1,
+      "best_anchor": 1
+    },
+    {
+      "kind": "TRUE_POS",
+      "split": "eval",
+      "probe": "경매 시장 균형 가격 발견 매수매도 호가 만남",
+      "c1": 0.6137,
+      "gap": 0.1179,
+      "hit": false,
+      "intended": 2,
+      "best_anchor": 2
+    },
+    {
+      "kind": "TRUE_POS",
+      "split": "eval",
+      "probe": "다크풀 매칭 엔진 가격 발견 hidden liquidity",
+      "c1": 0.4999,
+      "gap": 0.0097,
+      "hit": false,
+      "intended": 2,
+      "best_anchor": 2
+    },
+    {
+      "kind": "TRUE_POS",
+      "split": "eval",
+      "probe": "분산 합의 Paxos linearizable 모든 노드 동일 순서",
+      "c1": 0.5454,
+      "gap": 0.0534,
+      "hit": false,
+      "intended": 3,
+      "best_anchor": 3
+    },
+    {
+      "kind": "TRUE_POS",
+      "split": "eval",
+      "probe": "Q-learning TD error 보상 예측 오차 가중 갱신",
+      "c1": 0.6168,
+      "gap": 0.0009,
+      "hit": false,
+      "intended": 4,
+      "best_anchor": 4
+    },
+    {
+      "kind": "TRUE_POS",
+      "split": "eval",
+      "probe": "시각피질 V1 simple cell 작은 수용장 특징 검출",
+      "c1": 0.5338,
+      "gap": 0.0378,
+      "hit": false,
+      "intended": 5,
+      "best_anchor": 5
+    }
+  ]
+}

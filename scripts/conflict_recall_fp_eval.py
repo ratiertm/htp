@@ -83,6 +83,56 @@ PROBES = [
 ]
 
 
+# ══════════════════════════════════════════════════════════════
+# Phase 2.7 (2026-05-20) — out-of-sample 일반화 검정용 확장 데이터셋.
+# 지시서: docs/05-measure/claude_code_측정지시서_phase2.7_oos_generalization.md
+# 사용자 검수 통과 (2026-05-20).
+#
+# 4-tuple: (kind, text, anchor_idx, split)
+#   split = "calib"  → 컷 산출용 (NEG 절반)
+#   split = "eval"   → 평가용 (나머지 NEG 절반 + 모든 TRUE_POS)
+#
+# 기존 PROBES (3-tuple) 는 무변경 — Phase 2.5/2.6 재현성 보존.
+# 신규 측정은 PROBES_V2 만 사용. anchor 6 무변경.
+# ══════════════════════════════════════════════════════════════
+PROBES_V2 = [
+    # --- HARD_NEG : 같은 도메인, 다른 메커니즘 ---
+    # split=calib (기존 6건)
+    ("HARD_NEG", "Redis cluster 샤딩 hash slot 재분배 리밸런싱",            0, "calib"),
+    ("HARD_NEG", "Transformer KV cache 메모리 추론 최적화",                 1, "calib"),
+    ("HARD_NEG", "거래소 settlement T+2 청산 결제 리스크",                  2, "calib"),
+    ("HARD_NEG", "PostgreSQL VACUUM 디스크 공간 회수 autovacuum",           3, "calib"),
+    ("HARD_NEG", "GABA 억제성 시냅스 lateral inhibition",                   4, "calib"),
+    ("HARD_NEG", "RNN 순환 게이트 LSTM forget gate 시계열",                 5, "calib"),
+    # split=eval (신규 6건 — 같은 도메인 또 다른 메커니즘)
+    ("HARD_NEG", "Redis pub sub channel subscribe 비동기 메시징",           0, "eval"),
+    ("HARD_NEG", "Transformer positional encoding sinusoidal 위치 인코딩", 1, "eval"),
+    ("HARD_NEG", "거래소 마진콜 강제청산 leverage 위험",                    2, "eval"),
+    ("HARD_NEG", "PostgreSQL btree index 빠른 검색 색인",                   3, "eval"),
+    ("HARD_NEG", "노르아드레날린 각성 주의 attention modulation",           4, "eval"),
+    ("HARD_NEG", "Batch Normalization layer 정규화 학습 안정화",            5, "eval"),
+    # --- MID_NEG : split=calib 2건 / eval 2건 ---
+    ("MID_NEG",  "Kafka consumer group partition rebalance",               0, "calib"),
+    ("MID_NEG",  "RLHF 인간 피드백 보상 모델 정렬",                         1, "calib"),
+    ("MID_NEG",  "옵션 implied volatility 변동성 스마일",                   2, "eval"),
+    ("MID_NEG",  "Raft 합의 알고리즘 leader election",                      3, "eval"),
+    # --- EASY_NEG : split=calib 1건 / eval 1건 ---
+    ("EASY_NEG", "중세 고딕 성당 부벽 구조 하중 분산",                      0, "calib"),
+    ("EASY_NEG", "김치 발효 유산균 pH 변화 숙성",                           3, "eval"),
+    # --- TRUE_POS (10건) : 전부 split=eval (지시서 §1.M1-d) ---
+    ("TRUE_POS", "메모리 캐시에서 오래된 항목 제거하는 LRU 축출 정책",      0, "eval"),
+    ("TRUE_POS", "OS 페이지 교체 알고리즘 clock sweep 오래된 페이지 제거",  0, "eval"),
+    ("TRUE_POS", "CDN 엣지 캐시 만료 정책 stale content 추출",              0, "eval"),
+    ("TRUE_POS", "셀프 어텐션이 모든 토큰 쌍을 동시에 가중하는 전역 연산",  1, "eval"),
+    ("TRUE_POS", "그래프 신경망 message passing 전체 노드 동시 갱신",       1, "eval"),
+    ("TRUE_POS", "경매 시장 균형 가격 발견 매수매도 호가 만남",             2, "eval"),
+    ("TRUE_POS", "다크풀 매칭 엔진 가격 발견 hidden liquidity",             2, "eval"),
+    ("TRUE_POS", "분산 합의 Paxos linearizable 모든 노드 동일 순서",        3, "eval"),
+    ("TRUE_POS", "Q-learning TD error 보상 예측 오차 가중 갱신",            4, "eval"),
+    ("TRUE_POS", "시각피질 V1 simple cell 작은 수용장 특징 검출",           5, "eval"),
+]
+
+
 def _l2_from_bytes(blob: bytes, qv: torch.Tensor) -> "tuple[float,float]":
     """저장된 state_vec bytes vs query → (cosine, L2 norm). 둘 다 반환."""
     n = len(blob) // 4
