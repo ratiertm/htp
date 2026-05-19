@@ -116,7 +116,11 @@ tests/knowledge/                         [htp-thalamus-car sub-1 신규, 8개]
 - 측정 스크립트: `scripts/conflict_recall_fp_eval.py`, `scripts/conflict_recall_remedy_eval.py`
 - 3단계 처방(interpretation-key/hybrid/구조화) 측정 대기 중
 - **금지** (지시서 §1): threshold 동적조정 / recall key 변경 / "MERGE GO" 근거 머지 / cos-L2 정합 리팩토링
-- **차이 발견**: 지시서 §3-2 기대 `test_recall_does_not_hit_on_unrelated_conflict=FAIL` 인데 실측 PASS — 테스트가 query-prefix 사용해 EASY_NEG 2건만으로는 결함 우회. Phase 3 에서 HARD_NEG 포함 강화 필요
+- **차이 발견 + 해결** (2026-05-20 보강):
+  - 지시서 §2-1 코드: `enc.encode_query()` + EASY_NEG 2건 → query-prefix 효과로 결함 우회 PASS
+  - 시도 1 — KnowledgeLoop.ingest 실 경로 + HARD_NEG: 같은 도메인 연속 ingest 는 conflict<0.12 → escalate=False → `_try_recall_conflict` 자체 호출 안 됨 → 자동 우회
+  - **시도 2 (성공)** — MemorySystem.recall_conflict 직접 호출 + passage prefix (encode) + HARD_NEG: **xfail strict 작동** (test_recall_conflict_hard_neg_via_memory_direct). 지시서 측정 1 HARD_NEG FP 6/6 (100%) 와 정확 일치
+  - 교훈: 결함은 *escalate 분기* 가 아니라 *MemorySystem.recall_conflict* 자체. 통합 테스트는 escalate 분기 우회 가능 — 단위 테스트가 직접 검증해야
 
 **Bridge Integration (2026-05-18 신규)**: `htp/knowledge/loop.py` 가 `htp/thalamus` 의
 RegionSignature / PairwiseCoherenceGate / VectorRouter 를 직접 사용 — 시스템 A↔B 단방향 연결.

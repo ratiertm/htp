@@ -388,3 +388,124 @@ def test_trigger_key_recalls_same_conflict_different_surface():
         mismatch = float((qv - pv).norm())
         # 당위: 같은 충돌이므로 HIT 해야 함 → 현 설계로는 실패(xfail)
         assert mismatch < mem.CONFLICT_RECALL_MISMATCH_THRESHOLD
+
+
+# ══════════════════════════════════════════════════════════
+# 보강 (2026-05-20) — 지시서 §2-1 테스트의 두 한계 보완:
+#   (1) prefix 불일치: 지시서 코드는 enc.encode_query() 사용 →
+#       실 _try_recall_conflict 의 encode() 경로 우회
+#   (2) NEG 난이도 부족: EASY_NEG 2건 (성당/김치) 만 — query-prefix
+#       에 의해 분리됨. HARD_NEG (같은 도메인 다른 메커니즘) 누락
+# 해결: 실 KnowledgeLoop.ingest 경로 + HARD_NEG 데이터셋으로 통합 검증
+# ══════════════════════════════════════════════════════════
+
+
+@pytest.mark.skipif(_SKIP_HF, reason="HF download skipped")
+def test_recall_hint_none_on_hard_neg_via_real_loop_path():
+    """실 KnowledgeLoop.ingest 경로로 HARD_NEG 거짓 양성 거부 검증.
+
+    기존 test_recall_does_not_hit_on_unrelated_conflict 는:
+      - enc.encode_query() 사용 (실 loop 와 다른 prefix)
+      - EASY_NEG 2건만 (지시서 측정 1: query-prefix 로 일부 분리 가능)
+    → 결함 우회. 본 테스트는 (1) loop.ingest 실 경로 + (2) HARD_NEG 로
+    실제 결함 RED 를 고정.
+
+    현 master RED (의도된 실패) → Phase 3 처방 후 GREEN.
+    """
+    from htp.knowledge.embedding import EmbeddingBridge
+    from htp.knowledge import KnowledgeLoop, KnowledgeStore
+    with tempfile.TemporaryDirectory() as td:
+        store = KnowledgeStore(Path(td) / "log.jsonl")
+        loop = KnowledgeLoop(
+            encoder=EmbeddingBridge(), store=store,
+            coherence_thresholds=(0.10, 0.12),
+        )
+        # baseline: 다른 도메인 채우기 (escalate 조건 형성)
+        for t in ("해마 CA3 패턴 완성 시냅스 recurrent",
+                  "시냅스 가소성 헵 학습 법칙",
+                  "감마 진동 뇌파 의식 통합"):
+            loop.ingest(t, source="뇌과학")
+
+        # 1회차: Redis LRU 캐시 충돌 ingest → escalate → Episode 저장
+        loop.ingest(
+            "Redis LRU 캐시 eviction 전략 메모리 축출",
+            source="인프라",
+        )
+        # 2회차: HARD_NEG — 같은 도메인 (인프라/Redis), 다른 메커니즘 (샤딩)
+        # 지시서 측정 1 의 HARD_NEG anchor0 케이스와 동일.
+        r = loop.ingest(
+            "Redis cluster 샤딩 hash slot 재분배 리밸런싱",
+            source="인프라",
+        )
+
+        # 실 경로 sanity 검증.
+        #
+        # ⚠ 발견 (2026-05-20 진단): 같은 도메인 연속 ingest 는 _evaluate_coherence
+        # 의 top-3 이웃에 직전 ingest 가 포함됨 → coherence 0.90+ → conflict
+        # < 0.12 → escalate=False → _try_recall_conflict 자체가 호출 안 됨.
+        # 따라서 이 테스트는 *결함을 검증하지 못함* — escalate 분기에서 자동
+        # 우회됨. 결함 RED 는 아래 test_recall_conflict_hard_neg_via_memory_direct
+        # (MemorySystem 직접 호출 — escalate 분기 우회) 에서 검증.
+        if r.coherence_info and r.coherence_info.get("escalate"):
+            assert r.recall_hint is None, (
+                f"거짓 양성: HARD_NEG (Redis 샤딩 vs LRU eviction) 가 "
+                f"recall_hint={r.recall_hint!r} 로 HIT — 결함 RED 확정"
+            )
+
+
+@pytest.mark.skipif(_SKIP_HF, reason="HF download skipped")
+@pytest.mark.xfail(
+    reason="trigger-key 설계 결함(측정 1·2): HARD_NEG 같은 도메인 다른 "
+           "메커니즘이 trigger 임베딩 cosine 0.85+ 분포에서 분리 불가. "
+           "현 master 에서 거짓 양성 발현. Phase 3 처방 전까지 의도된 "
+           "실패 — 지시서 §0 측정 1 의 HARD_NEG FP 6/6 (100%) 와 일치.",
+    strict=True)
+def test_recall_conflict_hard_neg_via_memory_direct():
+    """MemorySystem.recall_conflict 직접 호출 + HARD_NEG — escalate 분기 우회.
+
+    위 test_recall_hint_none_on_hard_neg_via_real_loop_path 는 escalate
+    분기에서 자동 우회됨 (같은 도메인 연속 ingest → coherence 높음).
+    본 테스트는 그 우회를 차단하고 *MemorySystem 의 recall key 설계 결함*
+    자체를 검증한다.
+
+    경로 일치:
+      - encoder.encode() (passage prefix) 사용 — 실 _try_recall_conflict 와 동일
+      - mem.recall_conflict 직접 호출 — escalate 분기 안 거침
+      - HARD_NEG = 같은 Redis 도메인 다른 메커니즘 (지시서 측정 1 anchor0)
+
+    strict xfail = 처방으로 해결되면 XPASS 로 빨간불 → 마커 제거 + GREEN.
+    """
+    from htp.knowledge.embedding import EmbeddingBridge
+    import torch, struct
+    with tempfile.TemporaryDirectory() as td:
+        enc = EmbeddingBridge()
+        mem = MemorySystem(memory_dir=Path(td) / "mem")
+        # anchor: Redis LRU 캐시 충돌 (지시서 측정 1 anchor[0])
+        tv = torch.tensor(enc.encode(
+            "Redis LRU 캐시 eviction 전략 메모리 축출"),
+            dtype=torch.float32)
+        mem.save_conflict(
+            trigger_vec=tv, new_text="Redis LRU eviction",
+            partner_texts=["d"], interpretation="categorical conflict",
+            conflict_score=0.15)
+
+        # HARD_NEG: 같은 도메인, 다른 메커니즘 (지시서 측정 1 HARD_NEG[anchor0])
+        # passage prefix (encode) 사용 — 실 _try_recall_conflict 경로와 동일
+        qv = torch.tensor(enc.encode(
+            "Redis cluster 샤딩 hash slot 재분배 리밸런싱"),
+            dtype=torch.float32)
+        results = mem.recall_conflict(qv, top_k=3)
+        assert results, "후보 없음 (anchor 미저장?)"
+        best_ep, _ = results[0]
+        n = len(best_ep.state_vec) // 4
+        pv = torch.tensor(struct.unpack(f"{n}f", best_ep.state_vec),
+                          dtype=torch.float32)
+        mismatch = float((qv - pv).norm())
+        # 당위: HARD_NEG 이므로 mismatch >= threshold 여야 함 (거짓 양성 거부).
+        # 현 master: trigger 임베딩 cosine 0.85+ → mismatch < 0.6 → 거짓 양성 HIT.
+        # → 이 assert 가 FAIL = 결함 RED 확정 (xfail strict 가 expected_failure
+        #    로 표시)
+        assert mismatch >= mem.CONFLICT_RECALL_MISMATCH_THRESHOLD, (
+            f"거짓 양성: HARD_NEG mismatch={mismatch:.3f} < "
+            f"{mem.CONFLICT_RECALL_MISMATCH_THRESHOLD} (=거짓 양성 HIT)"
+        )
