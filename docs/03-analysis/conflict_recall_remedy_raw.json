@@ -1,0 +1,223 @@
+{
+  "dist_cut": 0.6212822586297989,
+  "margin": 0.05,
+  "neg_best_stats": {
+    "min": 0.48928773403167725,
+    "mean": 0.5431278149286906,
+    "max": 0.6316729187965393
+  },
+  "summary": [
+    {
+      "name": "Baseline (현재: 절대 cos≥0.82)",
+      "hard_fp": 0,
+      "all_neg_fp": 0,
+      "tp": 0,
+      "verdict": "FAIL"
+    },
+    {
+      "name": "P1 상대마진 (gap≥0.05)",
+      "hard_fp": 2,
+      "all_neg_fp": 2,
+      "tp": 2,
+      "verdict": "FAIL"
+    },
+    {
+      "name": "P2 분포컷 (cos≥0.621)",
+      "hard_fp": 1,
+      "all_neg_fp": 1,
+      "tp": 2,
+      "verdict": "PASS"
+    },
+    {
+      "name": "P3 결합 (P1 AND P2)",
+      "hard_fp": 1,
+      "all_neg_fp": 1,
+      "tp": 2,
+      "verdict": "PASS"
+    }
+  ],
+  "rows": [
+    {
+      "kind": "HARD_NEG",
+      "probe": "Redis cluster 샤딩 hash slot 재분배 리밸런싱",
+      "best_anchor": 0,
+      "intended": 0,
+      "c1": 0.6128,
+      "c2": 0.5511,
+      "gap": 0.0616,
+      "baseline_hit": false,
+      "P1_margin_hit": true,
+      "P2_distcut_hit": false,
+      "P3_both_hit": false
+    },
+    {
+      "kind": "HARD_NEG",
+      "probe": "Transformer KV cache 메모리 추론 최적화",
+      "best_anchor": 1,
+      "intended": 1,
+      "c1": 0.6317,
+      "c2": 0.5757,
+      "gap": 0.0559,
+      "baseline_hit": false,
+      "P1_margin_hit": true,
+      "P2_distcut_hit": true,
+      "P3_both_hit": true
+    },
+    {
+      "kind": "HARD_NEG",
+      "probe": "거래소 settlement T+2 청산 결제 리스크",
+      "best_anchor": 2,
+      "intended": 2,
+      "c1": 0.5419,
+      "c2": 0.5054,
+      "gap": 0.0365,
+      "baseline_hit": false,
+      "P1_margin_hit": false,
+      "P2_distcut_hit": false,
+      "P3_both_hit": false
+    },
+    {
+      "kind": "HARD_NEG",
+      "probe": "PostgreSQL VACUUM 디스크 공간 회수 autovacuum",
+      "best_anchor": 0,
+      "intended": 3,
+      "c1": 0.5304,
+      "c2": 0.4915,
+      "gap": 0.0389,
+      "baseline_hit": false,
+      "P1_margin_hit": false,
+      "P2_distcut_hit": false,
+      "P3_both_hit": false
+    },
+    {
+      "kind": "HARD_NEG",
+      "probe": "GABA 억제성 시냅스 lateral inhibition",
+      "best_anchor": 4,
+      "intended": 4,
+      "c1": 0.5824,
+      "c2": 0.5708,
+      "gap": 0.0116,
+      "baseline_hit": false,
+      "P1_margin_hit": false,
+      "P2_distcut_hit": false,
+      "P3_both_hit": false
+    },
+    {
+      "kind": "HARD_NEG",
+      "probe": "RNN 순환 게이트 LSTM forget gate 시계열",
+      "best_anchor": 0,
+      "intended": 5,
+      "c1": 0.5217,
+      "c2": 0.5079,
+      "gap": 0.0137,
+      "baseline_hit": false,
+      "P1_margin_hit": false,
+      "P2_distcut_hit": false,
+      "P3_both_hit": false
+    },
+    {
+      "kind": "MID_NEG",
+      "probe": "Kafka consumer group partition rebalance",
+      "best_anchor": 5,
+      "intended": 0,
+      "c1": 0.5173,
+      "c2": 0.5129,
+      "gap": 0.0044,
+      "baseline_hit": false,
+      "P1_margin_hit": false,
+      "P2_distcut_hit": false,
+      "P3_both_hit": false
+    },
+    {
+      "kind": "MID_NEG",
+      "probe": "RLHF 인간 피드백 보상 모델 정렬",
+      "best_anchor": 1,
+      "intended": 1,
+      "c1": 0.5287,
+      "c2": 0.5271,
+      "gap": 0.0016,
+      "baseline_hit": false,
+      "P1_margin_hit": false,
+      "P2_distcut_hit": false,
+      "P3_both_hit": false
+    },
+    {
+      "kind": "MID_NEG",
+      "probe": "옵션 implied volatility 변동성 스마일",
+      "best_anchor": 2,
+      "intended": 2,
+      "c1": 0.5507,
+      "c2": 0.5223,
+      "gap": 0.0285,
+      "baseline_hit": false,
+      "P1_margin_hit": false,
+      "P2_distcut_hit": false,
+      "P3_both_hit": false
+    },
+    {
+      "kind": "MID_NEG",
+      "probe": "Raft 합의 알고리즘 leader election",
+      "best_anchor": 0,
+      "intended": 3,
+      "c1": 0.4999,
+      "c2": 0.4949,
+      "gap": 0.005,
+      "baseline_hit": false,
+      "P1_margin_hit": false,
+      "P2_distcut_hit": false,
+      "P3_both_hit": false
+    },
+    {
+      "kind": "EASY_NEG",
+      "probe": "중세 고딕 성당 부벽 구조 하중 분산",
+      "best_anchor": 5,
+      "intended": 0,
+      "c1": 0.5109,
+      "c2": 0.5076,
+      "gap": 0.0033,
+      "baseline_hit": false,
+      "P1_margin_hit": false,
+      "P2_distcut_hit": false,
+      "P3_both_hit": false
+    },
+    {
+      "kind": "EASY_NEG",
+      "probe": "김치 발효 유산균 pH 변화 숙성",
+      "best_anchor": 5,
+      "intended": 3,
+      "c1": 0.4893,
+      "c2": 0.4719,
+      "gap": 0.0173,
+      "baseline_hit": false,
+      "P1_margin_hit": false,
+      "P2_distcut_hit": false,
+      "P3_both_hit": false
+    },
+    {
+      "kind": "TRUE_POS",
+      "probe": "메모리 캐시에서 오래된 항목 제거하는 LRU 축출 정책",
+      "best_anchor": 0,
+      "intended": 0,
+      "c1": 0.762,
+      "c2": 0.481,
+      "gap": 0.281,
+      "baseline_hit": false,
+      "P1_margin_hit": true,
+      "P2_distcut_hit": true,
+      "P3_both_hit": true
+    },
+    {
+      "kind": "TRUE_POS",
+      "probe": "셀프 어텐션이 모든 토큰 쌍을 동시에 가중하는 전역 연산",
+      "best_anchor": 1,
+      "intended": 1,
+      "c1": 0.6614,
+      "c2": 0.5526,
+      "gap": 0.1088,
+      "baseline_hit": false,
+      "P1_margin_hit": true,
+      "P2_distcut_hit": true,
+      "P3_both_hit": true
+    }
+  ]
+}

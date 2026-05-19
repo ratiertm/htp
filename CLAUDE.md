@@ -121,7 +121,8 @@ tests/knowledge/                         [htp-thalamus-car sub-1 신규, 8개]
   - 시도 1 — KnowledgeLoop.ingest 실 경로 + HARD_NEG: 같은 도메인 연속 ingest 는 conflict<0.12 → escalate=False → `_try_recall_conflict` 자체 호출 안 됨 → 자동 우회
   - **시도 2 (성공)** — MemorySystem.recall_conflict 직접 호출 + passage prefix (encode) + HARD_NEG: **xfail strict 작동** (test_recall_conflict_hard_neg_via_memory_direct). 지시서 측정 1 HARD_NEG FP 6/6 (100%) 와 정확 일치
   - 교훈: 결함은 *escalate 분기* 가 아니라 *MemorySystem.recall_conflict* 자체. 통합 테스트는 escalate 분기 우회 가능 — 단위 테스트가 직접 검증해야
-- **Phase 2.5 (2026-05-20)**: keyspace 공간문제 원인 = **Y (패러다임 한계)**. e5-small / e5-large / bge-m3 3 모델 모두 분리 FAIL (완전분리 음수). Phase 3 규모 = **대** 확정 — 비-임베딩 키 (LLM 라벨 추출 / 구조화 인덱스). bge-m3 만 평균마진 +0.0168 (양수) + S1 키 상호 분리도 0.545 (sharper) — 부수 신호. 자세히: `docs/05-measure/phase2.5_keyspace_report.md`
+- **Phase 2.5 (2026-05-20)**: keyspace 공간문제 원인 = Y (패러다임 한계) — 단일 모델 raw cos 자동 판정 기준. 단 bge-m3 만 평균마진 +0.0168 (양수) + S1 분리도 0.545 — 부수 신호. 자세히: `docs/05-measure/phase2.5_keyspace_report.md`
+- **Phase 2.6 (2026-05-20)**: bge-m3 + 처방 = **P2 분포컷 / P3 결합 PASS** (TP 2/2, HARD_NEG FP 1/6). e5-small 은 P1/P2/P3 모두 FAIL 재현. Phase 3 규모 = **중 확정** (bge-m3 모델 교체 + 분포컷 처방. 새 서브시스템 불필요). Phase 2.5 "대" 단정은 측정 2 처방 미적용 빈칸 탓 — 정정됨. 자세히: `docs/05-measure/phase2.6_bgem3_remedy_report.md`
 
 **Bridge Integration (2026-05-18 신규)**: `htp/knowledge/loop.py` 가 `htp/thalamus` 의
 RegionSignature / PairwiseCoherenceGate / VectorRouter 를 직접 사용 — 시스템 A↔B 단방향 연결.

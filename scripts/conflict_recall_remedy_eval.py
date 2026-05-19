@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import struct
+import sys
 from pathlib import Path
 import tempfile
 
@@ -50,8 +51,11 @@ def _cos(a: torch.Tensor, b: torch.Tensor) -> float:
     return F.cosine_similarity(a.unsqueeze(0), b.unsqueeze(0)).item()
 
 
-def build():
-    enc = EmbeddingBridge()
+def build(model_name=None):
+    # Phase 2.6 (2026-05-20): 모델 인자 파라미터화 — 지시서 §1.M1.
+    # MARGIN / percentile / 판정식 / 데이터셋 일체 불변. 모델만 sys.argv[1].
+    enc = EmbeddingBridge() if model_name is None \
+        else EmbeddingBridge(model_name=model_name)
     tmp = tempfile.mkdtemp(prefix="htp-rx-")
     mem = MemorySystem(memory_dir=Path(tmp) / "mem")
     anchor_vecs = []
@@ -89,8 +93,8 @@ def calibrate_dist_cut(enc, anchor_vecs):
     return cut, neg_best
 
 
-def evaluate():
-    enc, anchor_vecs, anchor_ids = build()
+def evaluate(model_name=None):
+    enc, anchor_vecs, anchor_ids = build(model_name)
 
     dist_cut, neg_best = calibrate_dist_cut(enc, anchor_vecs)
     print(f"# encoder: {enc._model_name} dim={enc.dim}")
@@ -177,4 +181,6 @@ def evaluate():
 
 
 if __name__ == "__main__":
-    evaluate()
+    # Phase 2.6: sys.argv[1] = model_name (없으면 default = e5-small)
+    model = sys.argv[1] if len(sys.argv) > 1 else None
+    evaluate(model)
