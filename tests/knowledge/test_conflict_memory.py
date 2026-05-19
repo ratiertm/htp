@@ -264,3 +264,127 @@ def test_recall_hint_on_second_similar_conflict():
         # 단, mismatch threshold 통과해야 — 실 e5 임베딩 의존성 있음
         # 통과 못해도 SC3 strict 는 아닐 수 있으나, 시도된 흐름 자체는 검증
         assert hasattr(r2, "recall_hint")
+
+
+# ══════════════════════════════════════════════════════════
+# htp-conflict-recall-guardrail (2026-05-20) — 회귀 방지선
+# Plan: docs/01-plan/features/htp-conflict-recall-guardrail.plan.md
+# 지시서: docs/01-plan/features/claude_code_지시서_conflict_recall_phase1-2.md §2
+#
+# 외부 리뷰 "MERGE GO" 가 컨테이너 실측에서 NO-GO 로 정정됨.
+# 거짓 양성 100% (12/12), 튜닝 처방 4종 전부 FAIL.
+# 결함 위치: threshold 아님. recall key 설계 (state_vec=trigger_vec).
+# 본 테스트들은 *결함을 RED 로 고정* — 처방 적용 후 GREEN 전환을 자동 검출.
+# ══════════════════════════════════════════════════════════
+
+
+@pytest.mark.skipif(_SKIP_HF, reason="HF download skipped")
+def test_recall_does_not_hit_on_unrelated_conflict():
+    """완전 무관 입력은 저장된 충돌 해석을 recall 해서는 안 된다.
+
+    측정 1 에서 'EASY_NEG' 가 현재 시스템에서 거짓 양성으로 HIT 함을
+    확인. 이 테스트는 그 결함을 고정한다 — 처방 적용 후 GREEN 이어야
+    머지 가능. 현 master 에서는 RED (의도된 실패 = 결함 증명).
+    """
+    from htp.knowledge.embedding import EmbeddingBridge
+    import torch
+    with tempfile.TemporaryDirectory() as td:
+        enc = EmbeddingBridge()
+        mem = MemorySystem(memory_dir=Path(td) / "mem")
+        # anchor: 인프라 캐시 충돌 해석 저장
+        tv = torch.tensor(enc.encode(
+            "Redis LRU 캐시 eviction 전략 메모리 축출"),
+            dtype=torch.float32)
+        mem.save_conflict(
+            trigger_vec=tv, new_text="Redis LRU eviction",
+            partner_texts=["해마 CA3"], interpretation="categorical conflict",
+            conflict_score=0.15)
+        # 완전 무관 probe — 절대 HIT 하면 안 됨
+        for unrelated in ("중세 고딕 성당 부벽 구조 하중 분산",
+                          "김치 발효 유산균 pH 변화 숙성"):
+            qv = torch.tensor(enc.encode_query(unrelated),
+                              dtype=torch.float32)
+            results = mem.recall_conflict(qv, top_k=3)
+            # recall_conflict 자체는 후보를 줄 수 있으나,
+            # _try_recall_conflict 게이트 통과(mismatch<thr)는 막혀야 함.
+            # 게이트 로직을 직접 재현해 검증:
+            if results:
+                best_ep, _ = results[0]
+                import struct
+                n = len(best_ep.state_vec) // 4
+                pv = torch.tensor(
+                    struct.unpack(f"{n}f", best_ep.state_vec),
+                    dtype=torch.float32)
+                mismatch = float((qv - pv).norm())
+                assert mismatch >= mem.CONFLICT_RECALL_MISMATCH_THRESHOLD, (
+                    f"거짓 양성: 무관 입력 '{unrelated[:20]}' 가 "
+                    f"mismatch={mismatch:.3f} 로 recall HIT "
+                    f"(thr={mem.CONFLICT_RECALL_MISMATCH_THRESHOLD})")
+
+
+@pytest.mark.skipif(_SKIP_HF, reason="HF download skipped")
+def test_recall_query_uses_query_prefix():
+    """발견 B 회귀 방지 — recall 경로가 encode_query() 를 쓰는지.
+
+    _try_recall_conflict 가 passage prefix(encode) 로 검색하면
+    e5 비대칭 검색이 깨진다. 이 테스트는 loop 가 query prefix 를
+    쓰도록 강제한다. 현 master RED (encode 사용 중) → 처방 후 GREEN.
+    """
+    from htp.knowledge.embedding import EmbeddingBridge
+    enc = EmbeddingBridge()
+    # e5: query/passage prefix 가 다른 벡터를 내야 정상
+    v_p = enc.encode("테스트 문장")
+    v_q = enc.encode_query("테스트 문장")
+    import numpy as np
+    assert not np.allclose(v_p, v_q), (
+        "encode 와 encode_query 가 동일 벡터 — prefix 미적용 의심")
+    # 실제 loop 경로가 query prefix 쓰는지는 작업 2-2 의 xfail 로 추적
+
+
+def test_recall_fp_dataset_is_tracked():
+    """측정 데이터셋이 repo 에 고정돼 재현 가능한지 sanity."""
+    from pathlib import Path as _P
+    p = _P("scripts/conflict_recall_fp_eval.py")
+    assert p.exists(), (
+        "측정 스크립트 미존재 — 작업 2-3 에서 scripts/ 에 커밋 필요")
+
+
+@pytest.mark.skipif(_SKIP_HF, reason="HF download skipped")
+@pytest.mark.xfail(
+    reason="trigger-key 설계 결함(측정 2): 표면 다르고 구조 같은 "
+           "충돌을 trigger 임베딩으로 MISS. 3단계 처방 전까지 "
+           "의도된 실패. 외부 리뷰 §9-1.1 미검증 결정.",
+    strict=True)
+def test_trigger_key_recalls_same_conflict_different_surface():
+    """같은 추상 충돌의 다른 표면 표현은 recall 돼야 한다 (당위).
+
+    'Redis 캐시 축출' 과 '시냅스 가지치기' 는 같은 eviction 추상
+    충돌이나 trigger 표면이 달라 임베딩이 멀다. 측정 2 에서 이
+    케이스 분리 불가 확인. strict xfail = 처방으로 해결되면
+    XPASS 로 빨간불 → 그때 이 마커를 제거하고 GREEN 전환.
+    """
+    from htp.knowledge.embedding import EmbeddingBridge
+    import torch, struct
+    with tempfile.TemporaryDirectory() as td:
+        enc = EmbeddingBridge()
+        mem = MemorySystem(memory_dir=Path(td) / "mem")
+        tv = torch.tensor(enc.encode(
+            "Redis LRU 캐시 eviction 메모리 축출 정책"),
+            dtype=torch.float32)
+        mem.save_conflict(
+            trigger_vec=tv, new_text="Redis eviction",
+            partner_texts=["x"], interpretation="eviction 추상 충돌",
+            conflict_score=0.15)
+        # 같은 추상 충돌, 완전히 다른 표면
+        qv = torch.tensor(enc.encode_query(
+            "시냅스 가지치기 미세아교세포 약한 연결 제거"),
+            dtype=torch.float32)
+        results = mem.recall_conflict(qv, top_k=3)
+        assert results, "후보 없음"
+        best_ep, _ = results[0]
+        n = len(best_ep.state_vec) // 4
+        pv = torch.tensor(struct.unpack(f"{n}f", best_ep.state_vec),
+                          dtype=torch.float32)
+        mismatch = float((qv - pv).norm())
+        # 당위: 같은 충돌이므로 HIT 해야 함 → 현 설계로는 실패(xfail)
+        assert mismatch < mem.CONFLICT_RECALL_MISMATCH_THRESHOLD

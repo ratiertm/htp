@@ -105,6 +105,19 @@ tests/knowledge/                         [htp-thalamus-car sub-1 신규, 8개]
 
 **현재 테스트 baseline: 222 = regression 57 + unit (DAG 양방향 강제 포함) + knowledge 30+** (~113s, EmbeddingBridge HF 캐시 warm 후)
 
+## htp-conflict-memory recall — 측정 확정 (외부 리뷰 후속, 2026-05-20)
+
+- 외부 리뷰 "Full MERGE GO" 판정 → 컨테이너 실측 결과 **NO-GO**
+- 거짓 양성: 현재 시스템 100% (threshold 0.6 무력)
+- 튜닝 레이어(threshold/margin/dist-cut) 전부 FAIL — 측정 2
+- 결함 위치: threshold 아님. recall key 설계(§9-1.1 trigger-key)
+- 발견 A(지표 불일치) 반증 / 발견 B(query-prefix) 확인
+- trigger-key = 미검증 LOCK → xfail strict 로 명문화 (`test_trigger_key_recalls_same_conflict_different_surface`)
+- 측정 스크립트: `scripts/conflict_recall_fp_eval.py`, `scripts/conflict_recall_remedy_eval.py`
+- 3단계 처방(interpretation-key/hybrid/구조화) 측정 대기 중
+- **금지** (지시서 §1): threshold 동적조정 / recall key 변경 / "MERGE GO" 근거 머지 / cos-L2 정합 리팩토링
+- **차이 발견**: 지시서 §3-2 기대 `test_recall_does_not_hit_on_unrelated_conflict=FAIL` 인데 실측 PASS — 테스트가 query-prefix 사용해 EASY_NEG 2건만으로는 결함 우회. Phase 3 에서 HARD_NEG 포함 강화 필요
+
 **Bridge Integration (2026-05-18 신규)**: `htp/knowledge/loop.py` 가 `htp/thalamus` 의
 RegionSignature / PairwiseCoherenceGate / VectorRouter 를 직접 사용 — 시스템 A↔B 단방향 연결.
 - 연결 1 (§2): source 별 RegionSignature 가 ingest vec 으로 Hebbian EMA 학습.
